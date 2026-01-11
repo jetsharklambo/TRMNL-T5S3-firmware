@@ -13,6 +13,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
+#include <epdiy.h>
 #include "power.h"
 #include "config.h"
 
@@ -141,6 +142,40 @@ bool trmnlApiSetup(TRMNLSetupResponse* response) {
 }
 
 /**
+ * @brief WORKAROUND: Calculate voltage that produces correct % in TRMNL's formula
+ *
+ * TRMNL's backend uses a linear voltage-to-percentage formula:
+ *   pct = ((voltage - 3.0) / 0.012)
+ *
+ * However, Li-ion batteries have non-linear discharge curves. Our BQ27220 fuel gauge
+ * uses professional coulomb counting and voltage compensation for accurate SOC.
+ *
+ * TRMNL's backend currently AVERAGES their voltage-based calculation with the
+ * percent_charged header we send, resulting in inaccurate dashboard display.
+ *
+ * This function reverse-engineers their formula to calculate a "fake" voltage
+ * that forces the dashboard to display our accurate BQ27220 SOC reading:
+ *   voltage_for_api = (soc_percentage * 0.012) + 3.0
+ *
+ * IMPORTANT: This voltage is ONLY sent to TRMNL API. Serial logs show TRUE voltage.
+ *
+ * TODO: Remove this workaround when TRMNL backend properly honors percent_charged header
+ *
+ * @param soc_percentage Accurate SOC from BQ27220 fuel gauge (0-100)
+ * @return Calculated voltage that produces correct percentage in TRMNL dashboard UI
+ */
+static float calculate_voltage_for_trmnl_api(uint8_t soc_percentage) {
+    // Reverse TRMNL's formula: voltage = (pct * 0.012) + 3.0
+    float calculated_voltage = (soc_percentage * 0.012f) + 3.0f;
+
+    // Clamp to reasonable Li-ion range (2.5V - 4.5V) for safety
+    if (calculated_voltage < 2.5f) calculated_voltage = 2.5f;
+    if (calculated_voltage > 4.5f) calculated_voltage = 4.5f;
+
+    return calculated_voltage;
+}
+
+/**
  * @brief Call /api/display to get current image URL
  * Requires API key from previous setup call
  */
@@ -155,15 +190,22 @@ bool trmnlApiDisplay(const char* api_key, TRMNLDisplayResponse* response) {
     String macAddress = getTRMNLMacAddress();
 
     // Get telemetry before making request
-    float battery_voltage = power_get_battery_voltage();
-    uint8_t battery_percentage = power_get_state_of_charge();
+    float battery_voltage = power_get_battery_voltage();  // TRUE voltage from BQ27220
+    uint8_t battery_percentage = power_get_state_of_charge();  // TRUE SOC from BQ27220
     const char* battery_status = power_get_battery_status();
     bool is_charging = power_is_charging();
     float battery_temp = power_get_battery_temperature();
     int wifi_rssi = WiFi.RSSI();
 
+    // WORKAROUND: Calculate fake voltage for TRMNL API to force correct % display
+    // TRMNL's backend averages their voltage-based calculation with percent_charged header.
+    // By reverse-engineering their formula, we force correct display in dashboard.
+    // Formula: voltage = (soc * 0.012) + 3.0 (inverse of their pct = (v - 3) / 0.012)
+    // TODO: Remove this when TRMNL backend properly honors percent_charged header
+    float battery_voltage_for_api = calculate_voltage_for_trmnl_api(battery_percentage);
+
     Serial.print("[TRMNL] Telemetry - Battery: ");
-    Serial.print(battery_voltage, 2);
+    Serial.print(battery_voltage, 2);  // Log TRUE voltage from BQ27220
     Serial.print("V (");
     Serial.print(battery_percentage);
     Serial.print("%, ");
@@ -172,7 +214,9 @@ bool trmnlApiDisplay(const char* api_key, TRMNLDisplayResponse* response) {
     Serial.print(is_charging ? "CHARGING" : "DISCHARGING");
     Serial.print(", ");
     Serial.print(battery_temp, 1);
-    Serial.print("°C), RSSI: ");
+    Serial.print("°C), API_VOLTAGE: ");
+    Serial.print(battery_voltage_for_api, 2);  // Show calculated voltage for transparency
+    Serial.print("V, RSSI: ");
     Serial.print(wifi_rssi);
     Serial.println("dBm");
 
@@ -190,10 +234,10 @@ bool trmnlApiDisplay(const char* api_key, TRMNLDisplayResponse* response) {
 
     // Format telemetry values as strings for headers
     char battery_str[16];
-    snprintf(battery_str, sizeof(battery_str), "%.2f", battery_voltage);
+    snprintf(battery_str, sizeof(battery_str), "%.2f", battery_voltage_for_api);  // Use calculated voltage for API
 
-    char battery_pct_str[4];
-    snprintf(battery_pct_str, sizeof(battery_pct_str), "%d", battery_percentage);
+    char battery_pct_str[8];  // Increased size for "100.00" format
+    snprintf(battery_pct_str, sizeof(battery_pct_str), "%.2f", (float)battery_percentage);
 
     char battery_temp_str[8];
     snprintf(battery_temp_str, sizeof(battery_temp_str), "%.1f", battery_temp);
@@ -201,18 +245,26 @@ bool trmnlApiDisplay(const char* api_key, TRMNLDisplayResponse* response) {
     char rssi_str[8];
     snprintf(rssi_str, sizeof(rssi_str), "%d", wifi_rssi);
 
-    // Add required headers with real telemetry from BQ27220
+    // Add required headers with telemetry from BQ27220
     http.addHeader("Content-Type", "application/json");
     http.addHeader("ID", macAddress);  // Use MAC address as ID
     http.addHeader("Access-Token", api_key);  // Use API key for authentication
     http.addHeader("Refresh-Rate", "10");  // Our 10-second interval
-    http.addHeader("Battery-Voltage", battery_str);  // Raw voltage from BQ27220: 3.7V
+    http.addHeader("Battery-Voltage", battery_str);  // WORKAROUND: Calculated voltage to force correct % in dashboard
     http.addHeader("Battery-Percentage", battery_pct_str);  // State of charge: 50%
+    http.addHeader("percent_charged", battery_pct_str);  // TRMNL should use this but currently doesn't
     http.addHeader("Battery-Status", battery_status);  // Status: normal/low/critical/full/charged
     http.addHeader("Battery-Charging", is_charging ? "true" : "false");  // REAL charging status!
     http.addHeader("Battery-Temperature", battery_temp_str);  // Battery temp in °C
     http.addHeader("RSSI", rssi_str);  // WiFi signal strength in dBm
     http.addHeader("FW-Version", FIRMWARE_VERSION);
+
+    // Identify device model for server-side resolution lookup
+    // TRMNL servers maintain device_model → resolution mapping
+    // m5papers3 = M5Stack Paper (960x540 resolution)
+    http.addHeader("Device-Model", "m5papers3");
+
+    Serial.println("[TRMNL] Device model: m5papers3 (960x540)");
 
     int httpCode = http.GET();
     Serial.print("[TRMNL] HTTP Response Code: ");

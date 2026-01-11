@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <time.h>  // Required for time_t type
 
 // ============================================================================
 // NVRAM Initialization
@@ -231,5 +232,69 @@ uint16_t nvram_get_refresh_rate();
  * @return true if saved successfully, false if error
  */
 bool nvram_write_refresh_rate(uint16_t refresh_rate_seconds);
+
+/**
+ * @brief Get last NTP sync timestamp from NVS
+ *
+ * Used to implement periodic NTP sync (only sync every 6 hours).
+ * ESP32 RTC maintains accurate time between syncs.
+ *
+ * @return Unix timestamp of last NTP sync, or 0 if never synced
+ */
+time_t nvram_get_last_ntp_sync();
+
+/**
+ * @brief Save last NTP sync timestamp to NVS
+ *
+ * Called after successful NTP time synchronization.
+ *
+ * @param timestamp Unix timestamp of NTP sync
+ * @return true if saved successfully, false if error
+ */
+bool nvram_write_last_ntp_sync(time_t timestamp);
+
+// ============================================================================
+// WiFi Fast Connect Optimization (Phase 2)
+// ============================================================================
+
+/**
+ * @brief Get cached WiFi BSSID from NVS
+ *
+ * Enables fast WiFi connect by skipping full AP scan.
+ * Device connects directly to cached BSSID on saved channel.
+ *
+ * @param bssid Output buffer for BSSID (must be 6 bytes)
+ * @return true if valid BSSID found, false if not cached
+ */
+bool nvram_get_wifi_bssid(uint8_t* bssid);
+
+/**
+ * @brief Save WiFi BSSID to NVS for fast connect
+ *
+ * Called after successful WiFi connection to cache AP BSSID.
+ *
+ * @param bssid BSSID to cache (6 bytes)
+ * @return true if saved successfully, false if error
+ */
+bool nvram_write_wifi_bssid(const uint8_t* bssid);
+
+/**
+ * @brief Get cached WiFi channel from NVS
+ *
+ * Used with BSSID for fast WiFi connect (skip channel scan).
+ *
+ * @return Channel number (1-14), or 0 if not cached
+ */
+int8_t nvram_get_wifi_channel();
+
+/**
+ * @brief Save WiFi channel to NVS for fast connect
+ *
+ * Called after successful WiFi connection to cache AP channel.
+ *
+ * @param channel WiFi channel number (1-14)
+ * @return true if saved successfully, false if error
+ */
+bool nvram_write_wifi_channel(int8_t channel);
 
 #endif // NVRAM_CONFIG_H

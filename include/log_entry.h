@@ -23,6 +23,25 @@ typedef enum {
 } log_level_t;
 
 // ============================================================================
+// Error Detail Context (for enhanced diagnostics)
+// ============================================================================
+
+typedef struct {
+    // HTTP/Download errors
+    int16_t http_status_code;    // HTTP status code (200, 404, 503, etc.), -1 if N/A
+    int8_t retry_attempt;        // Which retry attempt this was (1-3), 0 if N/A
+    uint32_t operation_time_ms;  // Time spent on operation in milliseconds
+    uint32_t bytes_transferred;  // Bytes downloaded/uploaded
+    char failure_reason[64];     // Short description of failure
+
+    // PNG/Image decode errors
+    int8_t png_error_code;       // PNG decoder error code, -1 if N/A
+    uint16_t image_width;        // Image width if known, 0 if N/A
+    uint16_t image_height;       // Image height if known, 0 if N/A
+    uint8_t image_bpp;           // Bits per pixel if known, 0 if N/A
+} error_detail_t;
+
+// ============================================================================
 // Device Status Context
 // ============================================================================
 
@@ -51,6 +70,27 @@ typedef struct {
     log_level_t level;          // Log level
     char message[256];          // Log message
     device_status_t status;     // Device status snapshot
+    error_detail_t error;       // Error details (populated for ERROR level logs)
 } log_entry_t;
+
+// ============================================================================
+// Helper Functions for Error Details
+// ============================================================================
+
+/**
+ * @brief Initialize error_detail_t with default "no error" values
+ */
+inline void error_detail_init(error_detail_t* error) {
+    if (!error) return;
+    error->http_status_code = -1;
+    error->retry_attempt = 0;
+    error->operation_time_ms = 0;
+    error->bytes_transferred = 0;
+    error->failure_reason[0] = '\0';
+    error->png_error_code = -1;
+    error->image_width = 0;
+    error->image_height = 0;
+    error->image_bpp = 0;
+}
 
 #endif // LOG_ENTRY_H

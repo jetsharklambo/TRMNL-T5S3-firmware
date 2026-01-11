@@ -10,10 +10,16 @@
 #ifndef DOWNLOAD_H
 #define DOWNLOAD_H
 
+#include <cstdint>
+
 // Structure to track download attempt information
 typedef struct {
     bool success;           // true if download succeeded
     int attempts_made;      // Number of attempts made (1-3)
+    int http_status_code;   // HTTP status code from last attempt (-1 if network error)
+    uint32_t total_time_ms; // Total time spent on all attempts
+    uint32_t bytes_downloaded; // Bytes downloaded on last attempt
+    char error_reason[64];  // Description of failure reason
 } download_result_t;
 
 /**

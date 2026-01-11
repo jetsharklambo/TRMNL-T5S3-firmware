@@ -2,9 +2,9 @@
 
 Production-ready firmware for the LilyGo T5 4.7" E-Paper Display (ESP32-S3) with WiFi provisioning, auto-registration, and TRMNL cloud integration.
 
-**Status**: ✅ **1.0 RELEASE READY** = 100% Core Features Complete
-**Last Updated**: December 17, 2025
-**Firmware Version**: 1.0.0
+**Status**: ✅ **v1.1.0 RELEASED** - Production Ready with Enhanced Features
+**Last Updated**: January 10, 2026
+**Firmware Version**: 1.1.0
 
 ### Project Progress
 - ✅ Phase 1: Core Infrastructure (100%)
@@ -31,6 +31,7 @@ Production-ready firmware for the LilyGo T5 4.7" E-Paper Display (ESP32-S3) with
    - ✅ Gets API key from server
    - ✅ Downloads and displays your content
    - ✅ Enters deep sleep (configurable interval)
+7. **Wake Device**: Press the **boot button** (GPIO0) to wake from sleep and force an immediate refresh
 
 ### For Developers
 ```bash
@@ -84,7 +85,7 @@ Before flashing the firmware, you'll need:
 
 The easiest way to flash the firmware:
 
-1. **Download the v1.0.0 release assets** from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases/tag/v1.0.0):
+1. **Download the latest release assets** from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases):
    - `firmware.bin`
    - `bootloader.bin`
    - `partitions.bin`
@@ -99,7 +100,7 @@ The easiest way to flash the firmware:
 
 4. **Run the flash script**:
    ```bash
-   cd releases/v1.0.0
+   cd releases/v1.1.0
    chmod +x flash.sh
    ./flash.sh
    ```
@@ -177,7 +178,7 @@ For developers who want to compile the firmware:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/jetsharklambo/TRMNL-T5S3-firmware/TRMNL-T5S3.git
+   git clone https://github.com/YOUR_REPO/TRMNL-T5S3.git
    cd TRMNL-T5S3
    ```
 
@@ -365,10 +366,11 @@ Then re-flash the firmware using one of the methods above.
 
 ### Phase 1: Modularization ✅
 - Extracted 750-line monolithic `main.cpp` into focused modules
-- **display.cpp**: E-paper rendering, PNG/BMP support, text overlay
+- **display.cpp**: E-paper rendering, PNG/BMP support (with centering), text overlay
 - **wifi.cpp**: WiFi connectivity, connection polling
 - **download.cpp**: HTTP image downloads, chunked streaming
 - **sleep.cpp**: Deep sleep, button/timer wakeup
+- **button.cpp**: Boot button wake from deep sleep (GPIO0)
 - ✅ 100% functionality preserved, zero changes to core logic
 
 ### Phase 2: NVS Persistence ✅

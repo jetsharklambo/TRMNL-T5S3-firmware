@@ -45,6 +45,29 @@ bool logging_init();
  */
 void logging_write(log_level_t level, const char* message);
 
+/**
+ * @brief Write a log entry with detailed error information
+ *
+ * Appends log entry with additional error diagnostic information
+ * for HTTP errors, PNG decode errors, etc.
+ *
+ * @param level Log level (typically LOG_ERROR)
+ * @param message Log message
+ * @param error Pointer to error_detail_t struct with diagnostic info
+ *
+ * Example:
+ * ```
+ * error_detail_t err;
+ * error_detail_init(&err);
+ * err.http_status_code = 503;
+ * err.retry_attempt = 2;
+ * err.operation_time_ms = 15234;
+ * strcpy(err.failure_reason, "Service unavailable");
+ * logging_write_error(LOG_ERROR, "API /display call failed", &err);
+ * ```
+ */
+void logging_write_error(log_level_t level, const char* message, const error_detail_t* error);
+
 // Use typedef in logging.h to ensure consistent typing
 typedef log_entry_t log_entry_type;
 

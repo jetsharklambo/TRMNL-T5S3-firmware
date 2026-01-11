@@ -86,13 +86,16 @@ void display_text(const char* text);
  * - Format: 1-bit PNG or BMP
  * - File size: 48-100KB
  *
+ * @return true if image was successfully displayed
+ * @return false if PNG decode error, file not found, or memory error
+ *
  * Time: ~3-5 seconds (decode) + 1700ms (display refresh)
  * Power: 150-200mA during refresh
  *
  * This function is the most complex and fragile.
  * Any pixel extraction logic changes require extensive testing.
  */
-void display_image(const char* path);
+bool display_image(const char* path);
 
 /**
  * @brief Clear display to white (full refresh)
@@ -166,5 +169,28 @@ void display_status(const char* message);
  * Power: ~150mA (display active)
  */
 void display_battery_warning(uint8_t battery_percent);
+
+/**
+ * @brief Get PNG decode error information
+ *
+ * Returns a structure with detailed PNG decode error information
+ * for logging purposes. Call this after a failed display_image() call.
+ *
+ * @return Structure containing:
+ *   - png_error_code: PNG decoder error code
+ *   - width: Image width (if known)
+ *   - height: Image height (if known)
+ *   - bpp: Bits per pixel (if known)
+ *   - error_description: Human-readable error string
+ */
+struct png_error_info_t {
+    int error_code;
+    uint16_t width;
+    uint16_t height;
+    uint8_t bpp;
+    const char* error_description;
+};
+
+png_error_info_t display_get_last_png_error();
 
 #endif // DISPLAY_H

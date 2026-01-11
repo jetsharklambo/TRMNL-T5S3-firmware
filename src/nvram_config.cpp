@@ -486,3 +486,185 @@ bool nvram_write_refresh_rate(uint16_t refresh_rate_seconds) {
 
     return true;
 }
+
+// ============================================================================
+// NTP Sync Timestamp Management (Battery Optimization)
+// ============================================================================
+
+/**
+ * @brief Get last NTP sync timestamp from NVS
+ *
+ * Used to implement periodic NTP sync optimization.
+ * Only sync every 6 hours; ESP32 RTC maintains accurate time between syncs.
+ *
+ * @return Unix timestamp of last NTP sync, or 0 if never synced
+ */
+time_t nvram_get_last_ntp_sync() {
+    if (!nvram_initialized) {
+        Serial.println("[NVRAM] ERROR: NVRAM not initialized, cannot read NTP sync time");
+        return 0;
+    }
+
+    // Read as UInt64 (time_t is 64-bit on ESP32)
+    uint64_t last_sync = nvram_preferences.getULong64("ntp_sync", 0);
+
+    Serial.print("[NVRAM] Last NTP sync: ");
+    if (last_sync > 0) {
+        Serial.print(last_sync);
+        Serial.print(" (");
+
+        // Calculate hours ago, checking for valid RTC time to prevent overflow
+        time_t now = time(NULL);
+        if (now > 100000 && now >= last_sync) {
+            time_t hours_ago = (now - last_sync) / 3600;
+            Serial.print(hours_ago);
+            Serial.println(" hours ago)");
+        } else {
+            Serial.println("RTC not synced yet)");
+        }
+    } else {
+        Serial.println("never");
+    }
+
+    return (time_t)last_sync;
+}
+
+/**
+ * @brief Save last NTP sync timestamp to NVS
+ *
+ * Called after successful NTP time synchronization.
+ *
+ * @param timestamp Unix timestamp of NTP sync
+ * @return true if saved successfully, false if error
+ */
+bool nvram_write_last_ntp_sync(time_t timestamp) {
+    if (!nvram_initialized) {
+        Serial.println("[NVRAM] ERROR: NVRAM not initialized, cannot write NTP sync time");
+        return false;
+    }
+
+    nvram_preferences.putULong64("ntp_sync", (uint64_t)timestamp);
+
+    Serial.print("[NVRAM] Saved NTP sync timestamp: ");
+    Serial.println(timestamp);
+
+    return true;
+}
+
+// ============================================================================
+// WiFi Fast Connect Optimization (Phase 2 Battery Optimization)
+// ============================================================================
+
+/**
+ * @brief Get cached WiFi BSSID from NVS
+ *
+ * Retrieves the last known good BSSID to enable fast WiFi connect.
+ * By connecting directly to the cached BSSID, we skip the full AP scan.
+ *
+ * @param bssid Output buffer for BSSID (must be 6 bytes)
+ * @return true if valid BSSID found, false if not cached
+ */
+bool nvram_get_wifi_bssid(uint8_t* bssid) {
+    if (!nvram_initialized || bssid == NULL) {
+        Serial.println("[NVRAM] ERROR: Cannot read WiFi BSSID (not initialized or NULL buffer)");
+        return false;
+    }
+
+    // Read 6-byte BSSID from NVS
+    size_t len = nvram_preferences.getBytes("wifi_bssid", bssid, 6);
+
+    if (len == 6) {
+        Serial.print("[NVRAM] Cached WiFi BSSID: ");
+        for (int i = 0; i < 6; i++) {
+            if (bssid[i] < 16) Serial.print("0");
+            Serial.print(bssid[i], HEX);
+            if (i < 5) Serial.print(":");
+        }
+        Serial.println();
+        return true;
+    } else {
+        Serial.println("[NVRAM] No cached WiFi BSSID found");
+        return false;
+    }
+}
+
+/**
+ * @brief Save WiFi BSSID to NVS for fast connect
+ *
+ * Caches the BSSID after successful connection for fast reconnect.
+ *
+ * @param bssid BSSID to cache (6 bytes)
+ * @return true if saved successfully, false if error
+ */
+bool nvram_write_wifi_bssid(const uint8_t* bssid) {
+    if (!nvram_initialized || bssid == NULL) {
+        Serial.println("[NVRAM] ERROR: Cannot write WiFi BSSID (not initialized or NULL)");
+        return false;
+    }
+
+    // Write 6-byte BSSID to NVS
+    nvram_preferences.putBytes("wifi_bssid", bssid, 6);
+
+    Serial.print("[NVRAM] Saved WiFi BSSID: ");
+    for (int i = 0; i < 6; i++) {
+        if (bssid[i] < 16) Serial.print("0");
+        Serial.print(bssid[i], HEX);
+        if (i < 5) Serial.print(":");
+    }
+    Serial.println();
+
+    return true;
+}
+
+/**
+ * @brief Get cached WiFi channel from NVS
+ *
+ * Retrieves the last known WiFi channel for fast connect.
+ *
+ * @return Channel number (1-14), or 0 if not cached
+ */
+int8_t nvram_get_wifi_channel() {
+    if (!nvram_initialized) {
+        Serial.println("[NVRAM] ERROR: Cannot read WiFi channel (not initialized)");
+        return 0;
+    }
+
+    int8_t channel = nvram_preferences.getChar("wifi_chan", 0);
+
+    if (channel > 0 && channel <= 14) {
+        Serial.print("[NVRAM] Cached WiFi channel: ");
+        Serial.println(channel);
+        return channel;
+    } else {
+        Serial.println("[NVRAM] No cached WiFi channel found");
+        return 0;
+    }
+}
+
+/**
+ * @brief Save WiFi channel to NVS for fast connect
+ *
+ * Caches the WiFi channel after successful connection.
+ *
+ * @param channel WiFi channel number (1-14)
+ * @return true if saved successfully, false if error
+ */
+bool nvram_write_wifi_channel(int8_t channel) {
+    if (!nvram_initialized) {
+        Serial.println("[NVRAM] ERROR: Cannot write WiFi channel (not initialized)");
+        return false;
+    }
+
+    if (channel < 1 || channel > 14) {
+        Serial.print("[NVRAM] WARNING: Invalid WiFi channel: ");
+        Serial.println(channel);
+        return false;
+    }
+
+    nvram_preferences.putChar("wifi_chan", channel);
+
+    Serial.print("[NVRAM] Saved WiFi channel: ");
+    Serial.println(channel);
+
+    return true;
+}

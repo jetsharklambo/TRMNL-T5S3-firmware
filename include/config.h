@@ -14,11 +14,18 @@
 
 // Firmware version string - reported to TRMNL server via FW-Version header
 // Update this for each release
-#define FIRMWARE_VERSION "1.0.0"
+#define FIRMWARE_VERSION "1.1.0"
 
 // ============================================================================
 // Deep Sleep Configuration
 // ============================================================================
+
+// Build mode: set to 1 for development, 0 for production
+// Development mode: longer wake time for debugging, shorter sleep intervals
+// Production mode: minimal wake time for battery efficiency
+#ifndef DEV_MODE
+#define DEV_MODE 0  // Set to 0 for production builds
+#endif
 
 // Deep sleep interval in seconds (how long device sleeps between updates)
 // NOTE: This value is used by the firmware. For testing, set to 10 seconds.
@@ -26,7 +33,13 @@
 #define TRMNL_DEEP_SLEEP_SECONDS 10
 
 // Shutdown timer in seconds (how long device stays awake before entering deep sleep)
-#define TRMNL_SHUTDOWN_TIMER_SECONDS 60
+// Development: 60s allows time for serial debugging and observation
+// Production: 5s minimizes battery drain while ensuring clean shutdown
+#if DEV_MODE
+  #define TRMNL_SHUTDOWN_TIMER_SECONDS 60
+#else
+  #define TRMNL_SHUTDOWN_TIMER_SECONDS 2  // Optimized: reduced from 5s to 2s for battery savings
+#endif
 
 // WiFi connection timeout (seconds)
 #define WIFI_CONNECT_TIMEOUT 15

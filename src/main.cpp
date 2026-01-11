@@ -78,29 +78,42 @@ void button_event_handler(button_event_t event, uint32_t hold_duration_ms) {
             Serial.print("[BUTTON] Button released after ");
             Serial.print(hold_duration_ms);
             Serial.println("ms");
+
+            // If released between 5-15 seconds, treat as soft reset
+            if (hold_duration_ms >= BUTTON_HOLD_SOFT_RESET_MS &&
+                hold_duration_ms < BUTTON_HOLD_HARD_RESET_MS) {
+                Serial.println("[BUTTON] Soft reset triggered (held 5-15s)");
+                delay(500);
+                ESP.restart();
+            }
             break;
 
         case BUTTON_EVENT_HELD_5S:
-            Serial.println("[BUTTON] 5-second hold detected - performing SOFT RESET");
-            display_text("Rebooting...");
-            delay(2000);
-            ESP.restart();  // Soft reboot
+            Serial.println("[BUTTON] ========================================");
+            Serial.println("[BUTTON] 5-SECOND HOLD DETECTED");
+            Serial.println("[BUTTON] Continue holding for 10 more seconds to:");
+            Serial.println("[BUTTON]   - Clear WiFi credentials");
+            Serial.println("[BUTTON]   - Clear API key");
+            Serial.println("[BUTTON]   - Reboot into AP setup mode");
+            Serial.println("[BUTTON] Or release now for soft reset");
+            Serial.println("[BUTTON] ========================================");
+            // DO NOT reboot here - let user continue holding to 15s
             break;
 
         case BUTTON_EVENT_HELD_15S:
-            Serial.println("[BUTTON] 15-second hold detected - performing HARD RESET");
-            display_text("Resetting Device...");
-            delay(2000);
+            Serial.println("[BUTTON] ========================================");
+            Serial.println("[BUTTON] 15-SECOND HOLD DETECTED - HARD RESET");
+            Serial.println("[BUTTON] ========================================");
 
             // Clear all credentials
             if (nvram_clear_all()) {
-                Serial.println("[BUTTON] Credentials cleared, rebooting into AP mode");
+                Serial.println("[BUTTON] ✓ Credentials cleared successfully");
+                Serial.println("[BUTTON] Rebooting into AP setup mode...");
                 delay(1000);
                 ESP.restart();  // Reboot into AP mode
             } else {
                 Serial.println("[BUTTON] ERROR: Failed to clear credentials");
-                display_text("Reset Failed");
-                delay(3000);
+                delay(2000);
             }
             break;
     }
@@ -260,13 +273,19 @@ void app_main() {
 
     // Phase 2c/3: Listen for serial commands (after NVRAM is initialized)
     // Allow user to clear credentials via serial during startup window
-    Serial.println("[SETUP] Listening for serial commands...");
-    Serial.println("[SETUP] Type 'clear' to erase credentials and enter AP mode");
-    Serial.println("[SETUP] Starting main application in 3 seconds...\n");
+    // OPTIMIZATION: Only wait for serial commands if button was pressed during boot
+    // This saves 3 seconds per timer wake (16% of active time)
+    if (button_wake) {
+        Serial.println("[SETUP] Button detected - listening for serial commands...");
+        Serial.println("[SETUP] Type 'clear' to erase credentials and enter AP mode");
+        Serial.println("[SETUP] Starting main application in 3 seconds...\n");
 
-    for (int i = 3; i > 0; i--) {
-        handle_serial_commands();
-        delay(1000);
+        for (int i = 3; i > 0; i--) {
+            handle_serial_commands();
+            delay(1000);
+        }
+    } else {
+        Serial.println("[SETUP] Skipping serial window (timer wake)");
     }
 
     // Initialize display (I2C, VCOM, state)
@@ -282,6 +301,8 @@ void app_main() {
 
     // Connect to WiFi
     Serial.println("[WIFI] Initializing WiFi...");
+    unsigned long timing_wifi_start = millis();
+    unsigned long timing_wifi_duration = 0;
 
     // If we have saved credentials, try them; otherwise use hardcoded
     bool wifi_connected = false;
@@ -289,7 +310,27 @@ void app_main() {
         Serial.print("[WIFI] Using saved WiFi SSID: ");
         Serial.println(wifi_ssid);
         WiFi.mode(WIFI_STA);
-        WiFi.begin(wifi_ssid, has_saved_password ? wifi_password : "");
+
+        // Phase 2 Optimization: Enable WiFi power saving mode
+        // Reduces power consumption during active WiFi session
+        WiFi.setSleep(WIFI_PS_MIN_MODEM);  // Modem sleep when idle
+        Serial.println("[WIFI] Power saving enabled (WIFI_PS_MIN_MODEM)");
+
+        // Phase 2 Optimization: Try fast connect using cached BSSID and channel
+        // This skips the full WiFi scan and connects directly to known AP
+        uint8_t cached_bssid[6];
+        int8_t cached_channel = nvram_get_wifi_channel();
+        bool has_cached_bssid = nvram_get_wifi_bssid(cached_bssid);
+
+        if (has_cached_bssid && cached_channel > 0) {
+            // Fast connect: Skip scan, connect directly
+            Serial.println("[WIFI] Attempting fast connect (cached BSSID/channel)");
+            WiFi.begin(wifi_ssid, has_saved_password ? wifi_password : "", cached_channel, cached_bssid);
+        } else {
+            // Normal connect: Full scan required
+            Serial.println("[WIFI] Performing full WiFi scan (no cached data)");
+            WiFi.begin(wifi_ssid, has_saved_password ? wifi_password : "");
+        }
 
         // Wait for connection with timeout
         int retry = 0;
@@ -303,7 +344,14 @@ void app_main() {
         wifi_connected = (WiFi.status() == WL_CONNECTED);
         if (!wifi_connected) {
             Serial.println("\n[WIFI] Failed to connect with saved credentials!");
-            logging_write(LOG_ERROR, "WiFi connection failed with saved credentials");
+
+            // Enhanced WiFi error logging with status code
+            char wifi_error[128];
+            wl_status_t status = WiFi.status();
+            snprintf(wifi_error, sizeof(wifi_error),
+                     "WiFi connection failed with saved credentials (status: %d, RSSI: %ddBm)",
+                     status, WiFi.RSSI());
+            logging_write(LOG_ERROR, wifi_error);
 
             // Increment WiFi failure counter
             uint8_t fail_count = nvram_increment_wifi_failure_count();
@@ -340,6 +388,16 @@ void app_main() {
             // Successfully connected - reset failure counter
             nvram_reset_wifi_failure_count();
             logging_write(LOG_INFO, "WiFi connected successfully");
+
+            // Phase 2 Optimization: Cache BSSID and channel for fast connect next time
+            const uint8_t* bssid = WiFi.BSSID();
+            int8_t channel = WiFi.channel();
+
+            if (bssid != NULL && channel > 0) {
+                nvram_write_wifi_bssid(bssid);
+                nvram_write_wifi_channel(channel);
+                Serial.println("[WIFI] Cached BSSID and channel for fast connect");
+            }
         }
     } else if (!wifi_connect_blocking()) {
         Serial.println("\n[WIFI] Failed to connect with hardcoded credentials!");
@@ -358,29 +416,71 @@ void app_main() {
         logging_write(LOG_INFO, "WiFi connected successfully");
     }
 
+    timing_wifi_duration = millis() - timing_wifi_start;
     Serial.println("\n[WIFI] Connected!");
     Serial.print("[WIFI] IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("[TIMING] WiFi connection: ");
+    Serial.print(timing_wifi_duration);
+    Serial.println("ms");
 
     // Phase 6: Sync time with NTP servers (for accurate log timestamps)
+    // OPTIMIZATION: Only sync every 6 hours - ESP32 RTC maintains accurate time between syncs
+    // This saves 3-5 seconds on most wake cycles
     {
-        Serial.println("[TIME] Synchronizing with NTP servers...");
-        configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // GMT offset 0, daylight 0
+        // Configure timezone for Pacific Time (PST/PDT with automatic DST handling)
+        // Format: PST8PDT,M3.2.0,M11.1.0
+        // - PST8: Pacific Standard Time, UTC-8
+        // - PDT: Pacific Daylight Time (UTC-7)
+        // - M3.2.0: DST starts 2nd Sunday in March at 2:00 AM
+        // - M11.1.0: DST ends 1st Sunday in November at 2:00 AM
+        setenv("TZ", "PST8PDT,M3.2.0,M11.1.0", 1);
+        tzset();
 
-        // Wait for time sync (with timeout)
-        int ntp_retry = 0;
-        while (time(NULL) < 100000 && ntp_retry < 10) {
-            delay(500);
-            ntp_retry++;
-        }
+        // Check when we last synced NTP
+        time_t last_ntp_sync = nvram_get_last_ntp_sync();
+        time_t now = time(NULL);
+        time_t time_since_sync = now - last_ntp_sync;
 
-        if (time(NULL) > 100000) {
-            time_t now = time(NULL);
-            struct tm* timeinfo = localtime(&now);
-            Serial.print("[TIME] Time synchronized: ");
-            Serial.print(asctime(timeinfo));
+        // Only sync if >6 hours since last sync (21600 seconds) or never synced
+        if (last_ntp_sync == 0 || time_since_sync > 21600 || now < 100000) {
+            Serial.println("[TIME] Performing NTP sync (periodic or first boot)...");
+
+            configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // GMT offset handled by TZ
+
+            // Wait for time sync with reduced timeout (3 seconds instead of 5)
+            // This saves 2 seconds on NTP failures
+            int ntp_retry = 0;
+            while (time(NULL) < 100000 && ntp_retry < 6) {  // 6 retries * 500ms = 3s max
+                delay(500);
+                ntp_retry++;
+            }
+
+            if (time(NULL) > 100000) {
+                now = time(NULL);
+                struct tm* timeinfo = localtime(&now);
+                Serial.print("[TIME] NTP sync successful: ");
+                Serial.print(asctime(timeinfo));
+
+                // Save sync timestamp for next wake
+                nvram_write_last_ntp_sync(now);
+            } else {
+                Serial.println("[TIME] WARNING: NTP sync failed (timeout after 3s)");
+                // Don't save timestamp on failure - will retry next wake
+                // But set a fallback time to prevent constant retries
+                if (last_ntp_sync > 0) {
+                    Serial.println("[TIME] Using last known good RTC time");
+                } else {
+                    Serial.println("[TIME] No previous NTP sync, timestamps may be incorrect");
+                }
+            }
         } else {
-            Serial.println("[TIME] WARNING: Time sync failed, timestamps may be incorrect");
+            // Use existing RTC time (already accurate from previous NTP sync)
+            struct tm* timeinfo = localtime(&now);
+            Serial.print("[TIME] Using RTC time (last NTP sync ");
+            Serial.print(time_since_sync / 3600);
+            Serial.print(" hours ago): ");
+            Serial.print(asctime(timeinfo));
         }
     }
 
@@ -516,10 +616,15 @@ void app_main() {
             Serial.println(api_key);
 
             // Try TRMNL API display endpoint
+            unsigned long timing_api_start = millis();
             TRMNLDisplayResponse displayResponse;
             if (trmnlApiDisplay(api_key, &displayResponse)) {
+                unsigned long timing_api_duration = millis() - timing_api_start;
                 image_url = displayResponse.image_url;
                 Serial.println("[MAIN] Got image URL from TRMNL API display endpoint");
+                Serial.print("[TIMING] API call: ");
+                Serial.print(timing_api_duration);
+                Serial.println("ms");
                 logging_write(LOG_INFO, "API /display call successful");
 
                 // Phase 6: Track image filename for logging
@@ -588,12 +693,24 @@ void app_main() {
         }
 
         // Download the image
+        unsigned long timing_download_start = millis();
         download_result_t download_result = download_image(image_url, image_file);
+        unsigned long timing_download_duration = millis() - timing_download_start;
+
         if (!download_result.success) {
             Serial.print("[DOWNLOAD] Failed after ");
             Serial.print(download_result.attempts_made);
             Serial.println(" attempts!");
-            logging_write(LOG_ERROR, "Image download failed after retries");
+            Serial.print("[TIMING] Download failed after: ");
+            Serial.print(timing_download_duration);
+            Serial.println("ms");
+
+            // Enhanced error logging with details
+            char error_details[128];
+            snprintf(error_details, sizeof(error_details),
+                     "Image download failed after %d attempts (%lums total)",
+                     download_result.attempts_made, timing_download_duration);
+            logging_write(LOG_ERROR, error_details);
 
             // Submit download failure log to server
             submit_error_log_to_server();
@@ -609,11 +726,35 @@ void app_main() {
         }
 
         Serial.println("[DOWNLOAD] Success!");
+        Serial.print("[TIMING] Image download: ");
+        Serial.print(timing_download_duration);
+        Serial.println("ms");
         logging_write(LOG_INFO, "Image downloaded successfully");
 
         // Display the image (CRITICAL: This is where PNG rendering happens)
-        display_image(image_file);
-        logging_write(LOG_INFO, "Image displayed on e-paper");
+        unsigned long timing_display_start = millis();
+        bool display_success = display_image(image_file);
+        unsigned long timing_display_duration = millis() - timing_display_start;
+        Serial.print("[TIMING] Image display: ");
+        Serial.print(timing_display_duration);
+        Serial.println("ms");
+
+        if (display_success) {
+            logging_write(LOG_INFO, "Image displayed on e-paper");
+        } else {
+            // Get PNG error details and log with diagnostics
+            png_error_info_t png_err = display_get_last_png_error();
+
+            error_detail_t err;
+            error_detail_init(&err);
+            err.png_error_code = png_err.error_code;
+            err.image_width = png_err.width;
+            err.image_height = png_err.height;
+            err.image_bpp = png_err.bpp;
+            snprintf(err.failure_reason, sizeof(err.failure_reason), "%s", png_err.error_description);
+
+            logging_write_error(LOG_ERROR, "Image display failed (PNG decode error)", &err);
+        }
     }
 
     // Cleanup before sleep
@@ -631,11 +772,39 @@ void app_main() {
             unsigned long remaining_time = shutdown_timeout_ms - elapsed_time;
             Serial.print("[SHUTDOWN] Waiting ");
             Serial.print(remaining_time / 1000);
-            Serial.println(" seconds before sleep...");
+            Serial.print(" seconds before sleep (");
+            Serial.print(DEV_MODE ? "DEV" : "PROD");
+            Serial.println(" mode)...");
             delay(remaining_time);
         } else {
             Serial.println("[SHUTDOWN] Timeout exceeded, entering sleep immediately");
         }
+
+        // Log total cycle timing and battery status
+        unsigned long total_uptime = millis();
+        float current_battery_v = power_get_battery_voltage();
+        uint8_t current_battery_soc = power_get_state_of_charge();
+
+        Serial.println("\n=== CYCLE TIMING SUMMARY ===");
+        Serial.print("Total uptime: ");
+        Serial.print(total_uptime);
+        Serial.println("ms");
+        #if DEV_MODE
+        Serial.print("  Dev delay: ");
+        Serial.print(TRMNL_SHUTDOWN_TIMER_SECONDS * 1000);
+        Serial.print("ms (");
+        Serial.print((TRMNL_SHUTDOWN_TIMER_SECONDS * 1000.0 / total_uptime) * 100, 1);
+        Serial.println("% of total)");
+        Serial.print("  Note: Set DEV_MODE=0 in config.h to reduce to 5s for ");
+        Serial.print(((total_uptime - 5000.0) / total_uptime) * 100, 1);
+        Serial.println("% power savings");
+        #endif
+        Serial.print("Battery: ");
+        Serial.print(current_battery_v);
+        Serial.print("V (");
+        Serial.print(current_battery_soc);
+        Serial.println("%)");
+        Serial.println("============================\n");
     }
 
 sleep_now:

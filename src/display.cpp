@@ -15,6 +15,7 @@
  */
 
 #include "display.h"
+#include "bmp_decoder.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -38,6 +39,24 @@ int png_draw_count = 0;
 
 // PNG file handle for callbacks
 static File pngFile;
+
+// Forward declaration
+static const char* get_png_error_string(int error_code);
+
+// PNG error tracking for enhanced logging
+static png_error_info_t last_png_error = {0, 0, 0, 0, "No error"};
+
+void display_set_png_error(int code, uint16_t w, uint16_t h, uint8_t bpp) {
+    last_png_error.error_code = code;
+    last_png_error.width = w;
+    last_png_error.height = h;
+    last_png_error.bpp = bpp;
+    last_png_error.error_description = get_png_error_string(code);
+}
+
+png_error_info_t display_get_last_png_error() {
+    return last_png_error;
+}
 
 // ============================================================================
 // PNG Error Strings - For debugging decode failures
@@ -288,8 +307,9 @@ void display_clear() {
  * @brief Display PNG image from SPIFFS
  * CRITICAL - Lines 353-597 from original main.cpp
  * Most complex function - handles file detection, PNG decoding, rendering
+ * @return true if successfully displayed, false on error
  */
-void display_image(const char* path) {
+bool display_image(const char* path) {
     Serial.print("[IMAGE] Loading: ");
     Serial.println(path);
 
@@ -297,7 +317,7 @@ void display_image(const char* path) {
     if (!SPIFFS.exists(path)) {
         Serial.println("[IMAGE] File not found!");
         display_text("File Not Found");
-        return;
+        return false;
     }
 
     // Get file size
@@ -305,7 +325,7 @@ void display_image(const char* path) {
     if (!f) {
         Serial.println("[IMAGE] Failed to open file!");
         display_text("Open Failed");
-        return;
+        return false;
     }
 
     size_t fileSize = f.size();
@@ -339,6 +359,11 @@ void display_image(const char* path) {
         Serial.print(get_png_error_string(rc));
         Serial.println(")");
 
+        if (rc != PNG_SUCCESS) {
+            // Failed to open PNG - record error
+            display_set_png_error(rc, 0, 0, 0);
+        }
+
         if (rc == PNG_SUCCESS) {
             int png_width = png.getWidth();
             int png_height = png.getHeight();
@@ -361,30 +386,59 @@ void display_image(const char* path) {
 
             // Allocate buffer - try PSRAM first, then regular RAM
             uint8_t* png_decode_buffer = NULL;
+            bool using_psram = false;
+
             #ifdef BOARD_HAS_PSRAM
             if (psramFound()) {
                 png_decode_buffer = (uint8_t*)ps_malloc(buffer_size);
-                Serial.println("[IMAGE] Allocated PNG buffer in PSRAM");
+                if (png_decode_buffer) {
+                    using_psram = true;
+                    Serial.print("[IMAGE] ✓ Allocated PNG buffer in PSRAM (");
+                    Serial.print(buffer_size);
+                    Serial.println(" bytes)");
+                } else {
+                    Serial.println("[IMAGE] WARNING: PSRAM allocation failed, trying regular RAM");
+                }
             }
             #endif
 
             if (!png_decode_buffer) {
                 png_decode_buffer = (uint8_t*)malloc(buffer_size);
                 if (png_decode_buffer) {
-                    Serial.println("[IMAGE] Allocated PNG buffer in RAM");
+                    Serial.print("[IMAGE] ✓ Allocated PNG buffer in RAM (");
+                    Serial.print(buffer_size);
+                    Serial.println(" bytes)");
                 } else {
-                    Serial.println("[IMAGE] Failed to allocate PNG buffer!");
+                    Serial.println("[IMAGE] ERROR: Failed to allocate PNG buffer!");
+                    Serial.print("[IMAGE] Requested: ");
+                    Serial.print(buffer_size);
+                    Serial.print(" bytes, Free heap: ");
+                    Serial.println(ESP.getFreeHeap());
                     png.close();
                     display_text("Memory Error");
-                    return;
+                    return false;
                 }
+            }
+
+            // Verify buffer is valid
+            if (!png_decode_buffer) {
+                Serial.println("[IMAGE] ERROR: Buffer pointer is NULL!");
+                png.close();
+                display_text("Buffer Error");
+                return false;
             }
 
             // Set the buffer for the decoder
             png.setBuffer(png_decode_buffer);
 
-            // Decode the PNG image
+            // Decode the PNG image with retry logic
             Serial.println("[IMAGE] Starting PNG decode with full buffer...");
+            Serial.print("[IMAGE] Buffer: ");
+            Serial.print(using_psram ? "PSRAM" : "RAM");
+            Serial.print(", Size: ");
+            Serial.print(buffer_size);
+            Serial.println(" bytes");
+
             int decode_rc = png.decode(NULL, 0);
 
             Serial.print("[IMAGE] PNG decode result: ");
@@ -392,6 +446,24 @@ void display_image(const char* path) {
             Serial.print(" (");
             Serial.print(get_png_error_string(decode_rc));
             Serial.println(")");
+
+            // Retry once if decode failed
+            if (decode_rc != PNG_SUCCESS) {
+                Serial.println("[IMAGE] Decode failed, retrying once...");
+                png.close();
+
+                // Reopen the PNG file
+                rc = png.open(path, png_open_file, png_close_file, png_read_file, png_seek_file, NULL);
+                if (rc == PNG_SUCCESS) {
+                    png.setBuffer(png_decode_buffer);
+                    decode_rc = png.decode(NULL, 0);
+                    Serial.print("[IMAGE] Retry decode result: ");
+                    Serial.print(decode_rc);
+                    Serial.print(" (");
+                    Serial.print(get_png_error_string(decode_rc));
+                    Serial.println(")");
+                }
+            }
 
             if (decode_rc == PNG_SUCCESS) {
                 // Clear display before drawing new image
@@ -486,17 +558,57 @@ void display_image(const char* path) {
                 epd_poweroff();
 
                 Serial.println("[IMAGE] Display update complete!");
+
+                // Free buffer and return success
+                free(png_decode_buffer);
+                Serial.println("[IMAGE] PNG buffer freed");
+                png.close();
+
+                return true;  // SUCCESS!
             } else {
-                Serial.print("[IMAGE] PNG decode failed with code: ");
-                Serial.println(decode_rc);
-                display_text("Decode Error");
+                Serial.println("[IMAGE] ====== PNG DECODE FAILURE ======");
+                Serial.print("[IMAGE] Error code: ");
+                Serial.print(decode_rc);
+                Serial.print(" (");
+                Serial.print(get_png_error_string(decode_rc));
+                Serial.println(")");
+                Serial.print("[IMAGE] File size: ");
+                Serial.println(fileSize);
+                Serial.print("[IMAGE] Buffer size: ");
+                Serial.println(buffer_size);
+                Serial.print("[IMAGE] PNG dimensions: ");
+                Serial.print(png_width);
+                Serial.print("x");
+                Serial.print(png_height);
+                Serial.print(" ");
+                Serial.print(png_bpp);
+                Serial.println("bpp");
+                Serial.print("[IMAGE] Buffer location: ");
+                Serial.println(using_psram ? "PSRAM" : "RAM");
+                Serial.print("[IMAGE] Free heap: ");
+                Serial.println(ESP.getFreeHeap());
+                Serial.println("[IMAGE] =============================");
+
+                // Record PNG decode error for logging
+                display_set_png_error(decode_rc, png_width, png_height, png_bpp);
+
+                // Display error with code
+                char error_msg[32];
+                snprintf(error_msg, sizeof(error_msg), "Decode Err %d", decode_rc);
+                display_text(error_msg);
+
+                // Free buffer and return failure
+                free(png_decode_buffer);
+                Serial.println("[IMAGE] PNG buffer freed");
+                png.close();
+                return false;
             }
 
+            // Should not reach here - success path returns early
             png.close();
-
-            // Free the buffers
             free(png_decode_buffer);
             Serial.println("[IMAGE] PNG buffer freed");
+            return false;
 
         } else {
             Serial.print("[IMAGE] PNG open failed with code: ");
@@ -505,14 +617,53 @@ void display_image(const char* path) {
             Serial.print(get_png_error_string(rc));
             Serial.println(")");
             display_text("PNG Error");
+            return false;
         }
 
     } else if (isBMP) {
         Serial.println("BMP");
-        display_text("BMP Format");
+
+        // Use custom BMP decoder
+        Serial.println("[IMAGE] Decoding BMP image...");
+        uint8_t* fb = epd_hl_get_framebuffer(&hl);
+
+        if (decode_bmp_to_framebuffer(path, fb)) {
+            // Clear display first to remove ghosting from previous image
+            Serial.println("[IMAGE] Clearing display before BMP render...");
+            epd_poweron();
+            epd_clear();
+            epd_poweroff();
+            delay(100);
+
+            // Render to display
+            Serial.println("[IMAGE] Rendering BMP to display...");
+            int temperature = epd_ambient_temperature();
+            Serial.print("[IMAGE] Temperature: ");
+            Serial.print(temperature);
+            Serial.println(" C");
+
+            Serial.println("[IMAGE] Powering on...");
+            epd_poweron();
+            delay(100);
+
+            Serial.println("[IMAGE] Updating screen (MODE_GL16)...");
+            epd_hl_update_screen(&hl, MODE_GL16, temperature);
+            delay(100);
+
+            Serial.println("[IMAGE] Powering off...");
+            epd_poweroff();
+
+            Serial.println("[IMAGE] BMP display complete!");
+            return true;
+        } else {
+            Serial.println("[IMAGE] BMP decode failed");
+            display_text("BMP Error");
+            return false;
+        }
     } else {
         Serial.println("Unknown format");
         display_text("Unknown Format");
+        return false;
     }
 }
 

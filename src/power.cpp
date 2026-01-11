@@ -149,18 +149,40 @@ uint8_t power_get_state_of_charge() {
         return 0;
     }
 
-    // Get state of charge from BQ27220
-    uint16_t soc = bq27220.getStateOfCharge();
+    // Retry logic for I2C communication
+    const int MAX_RETRIES = 3;
+    const int RETRY_DELAY_MS = 50;  // Wait 50ms between retries
 
-    // Sanity check: valid range is 0-100%
-    if (soc > 100) {
-        Serial.print("[POWER] ERROR: Invalid SOC reading: ");
-        Serial.print(soc);
-        Serial.println("% (likely I2C error, returning 50%)");
-        return 50;  // Return safe default
+    for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        // Get state of charge from BQ27220
+        uint16_t soc = bq27220.getStateOfCharge();
+
+        // Sanity check: valid range is 0-100%
+        if (soc <= 100) {
+            // Valid reading - return immediately
+            if (attempt > 1) {
+                Serial.print("[POWER] SOC read successful on attempt ");
+                Serial.println(attempt);
+            }
+            return (uint8_t)soc;
+        }
+
+        // Invalid reading - log and retry
+        Serial.print("[POWER] I2C error on attempt ");
+        Serial.print(attempt);
+        Serial.print("/");
+        Serial.print(MAX_RETRIES);
+        Serial.print(": Invalid SOC=");
+        Serial.println(soc);
+
+        if (attempt < MAX_RETRIES) {
+            delay(RETRY_DELAY_MS);  // Wait before retry
+        }
     }
 
-    return (uint8_t)soc;
+    // All retries failed - return last known good value or safe default
+    Serial.println("[POWER] ERROR: All SOC read attempts failed, returning 50%");
+    return 50;  // Return safe default
 }
 
 float power_get_battery_temperature() {
@@ -169,28 +191,49 @@ float power_get_battery_temperature() {
         return 0.0f;
     }
 
-    // Get battery temperature from BQ27220 (returned in 0.1K units)
-    uint16_t temp_raw = bq27220.getTemperature();
+    // Retry logic for I2C communication
+    const int MAX_RETRIES = 3;
+    const int RETRY_DELAY_MS = 50;
 
-    // Sanity check: valid range is roughly 250K-330K (-23°C to 57°C)
-    if (temp_raw < 2500 || temp_raw > 3300) {
-        Serial.print("[POWER] ERROR: Invalid temperature reading: ");
+    for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        // Get battery temperature from BQ27220 (returned in 0.1K units)
+        uint16_t temp_raw = bq27220.getTemperature();
+
+        // Sanity check: valid range is roughly 250K-330K (-23°C to 57°C)
+        if (temp_raw >= 2500 && temp_raw <= 3300) {
+            // Valid reading
+            float temp_k = temp_raw / 10.0f;
+            float temp_c = temp_k - 273.15f;
+
+            if (attempt > 1) {
+                Serial.print("[POWER] Temperature read successful on attempt ");
+                Serial.println(attempt);
+            }
+
+            Serial.print("[POWER] Battery temperature: ");
+            Serial.print(temp_c, 1);
+            Serial.println("°C");
+
+            return temp_c;
+        }
+
+        // Invalid reading - log and retry
+        Serial.print("[POWER] I2C error on attempt ");
+        Serial.print(attempt);
+        Serial.print("/");
+        Serial.print(MAX_RETRIES);
+        Serial.print(": Invalid temp=");
         Serial.print(temp_raw / 10.0f);
-        Serial.println("K (likely I2C error, returning 25°C)");
-        return 25.0f;  // Return safe default
+        Serial.println("K");
+
+        if (attempt < MAX_RETRIES) {
+            delay(RETRY_DELAY_MS);
+        }
     }
 
-    // Convert from 0.1K units to Celsius
-    // temp in K = temp_raw / 10.0
-    // temp in C = (temp in K) - 273.15
-    float temp_k = temp_raw / 10.0f;
-    float temp_c = temp_k - 273.15f;
-
-    Serial.print("[POWER] Battery temperature: ");
-    Serial.print(temp_c, 1);
-    Serial.println("°C");
-
-    return temp_c;
+    // All retries failed
+    Serial.println("[POWER] ERROR: All temperature read attempts failed, returning 25°C");
+    return 25.0f;  // Return safe default
 }
 
 uint32_t power_get_free_heap() {

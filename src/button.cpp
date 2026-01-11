@@ -38,6 +38,10 @@ static TaskHandle_t button_task_handle = nullptr;
 static bool soft_reset_event_fired = false;
 static bool hard_reset_event_fired = false;
 
+// Boot stabilization tracking
+static bool boot_stabilization_done = false;
+static bool boot_button_was_pressed = false;
+
 // ============================================================================
 // Button Reading Function (I2C)
 // ============================================================================
@@ -69,6 +73,21 @@ static bool button_read_from_pca9555() {
 static void button_polling_task(void *param) {
     Serial.println("[BUTTON] Polling task started");
 
+    // Phase 1: Boot stabilization - wait for hardware to settle
+    Serial.println("[BUTTON] Waiting 3 seconds for hardware stabilization...");
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+    // Phase 2: Read initial button state and store it
+    boot_button_was_pressed = button_read_from_pca9555();
+    if (boot_button_was_pressed) {
+        Serial.println("[BUTTON] Button detected as pressed at boot - will ignore until released");
+    } else {
+        Serial.println("[BUTTON] Button not pressed at boot");
+    }
+
+    boot_stabilization_done = true;
+    Serial.println("[BUTTON] Hardware stabilized, monitoring button state changes");
+
     while (1) {
         vTaskDelay(BUTTON_POLL_INTERVAL_MS / portTICK_PERIOD_MS);
 
@@ -83,6 +102,13 @@ static void button_polling_task(void *param) {
 
         // ====== BUTTON PRESSED ======
         if (button_now_pressed && !button_currently_pressed) {
+            // Ignore first press if button was held during boot
+            if (boot_button_was_pressed && boot_stabilization_done) {
+                Serial.println("[BUTTON] Ignoring initial boot press - waiting for release first");
+                boot_button_was_pressed = false;  // Clear flag after first ignore
+                continue;
+            }
+
             // Transition: released → pressed
             button_currently_pressed = true;
             button_press_start_time = now;
@@ -112,6 +138,13 @@ static void button_polling_task(void *param) {
             if (button_callback) {
                 button_callback(BUTTON_EVENT_RELEASED, hold_duration);
             }
+        }
+        // ====== BUTTON RELEASED (from boot press) ======
+        else if (!button_now_pressed && boot_button_was_pressed) {
+            // Button was pressed at boot and just released - clear the flag
+            Serial.println("[BUTTON] Boot press released - ready for normal operation");
+            boot_button_was_pressed = false;
+            last_state_change_time = now;
         }
 
         // ====== BUTTON HELD - 5 SECOND MARK ======
@@ -155,8 +188,12 @@ static void button_polling_task(void *param) {
 bool button_init() {
     Serial.println("[BUTTON] Initializing button detection...");
 
-    // Ensure GPIO38 is configured as input
+    // Ensure GPIO38 is configured as input with pull-up
+    // This pin is connected to the PCA9555 interrupt line
     pinMode(BUTTON_WAKEUP_PIN, INPUT_PULLUP);
+
+    // Small delay to let the pin settle
+    delay(100);
 
     // Create FreeRTOS task for button polling
     // Stack size: 3KB (same as official firmware's btn_task)

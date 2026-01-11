@@ -194,6 +194,73 @@ String sd_logging_format_entry(const log_entry_t* entry) {
     output += entry->message;
     output += "\n";
 
+    // Error details (if this is an error with diagnostics)
+    char detail_line[256];
+    bool has_error_details = false;
+
+    if (entry->level == LOG_ERROR) {
+        // Check if we have HTTP/download error details
+        if (entry->error.http_status_code != -1) {
+            snprintf(detail_line, sizeof(detail_line),
+                     "  HTTP Status: %d",
+                     entry->error.http_status_code);
+            output += detail_line;
+            has_error_details = true;
+
+            if (entry->error.failure_reason[0] != '\0') {
+                snprintf(detail_line, sizeof(detail_line),
+                         " (%s)", entry->error.failure_reason);
+                output += detail_line;
+            }
+            output += "\n";
+        }
+
+        // Retry attempt info
+        if (entry->error.retry_attempt > 0) {
+            snprintf(detail_line, sizeof(detail_line),
+                     "  Retry Attempt: %d/3, Time: %ums\n",
+                     entry->error.retry_attempt,
+                     entry->error.operation_time_ms);
+            output += detail_line;
+            has_error_details = true;
+        }
+
+        // Bytes transferred (for download errors)
+        if (entry->error.bytes_transferred > 0) {
+            snprintf(detail_line, sizeof(detail_line),
+                     "  Bytes Transferred: %u\n",
+                     entry->error.bytes_transferred);
+            output += detail_line;
+            has_error_details = true;
+        }
+
+        // PNG decode error details
+        if (entry->error.png_error_code != -1) {
+            snprintf(detail_line, sizeof(detail_line),
+                     "  PNG Error Code: %d", entry->error.png_error_code);
+            output += detail_line;
+
+            if (entry->error.image_width > 0 && entry->error.image_height > 0) {
+                snprintf(detail_line, sizeof(detail_line),
+                         " (Image: %dx%d, %dbpp)",
+                         entry->error.image_width,
+                         entry->error.image_height,
+                         entry->error.image_bpp);
+                output += detail_line;
+            }
+            output += "\n";
+            has_error_details = true;
+        }
+
+        // Generic failure reason (if not already shown)
+        if (!has_error_details && entry->error.failure_reason[0] != '\0') {
+            snprintf(detail_line, sizeof(detail_line),
+                     "  Reason: %s\n",
+                     entry->error.failure_reason);
+            output += detail_line;
+        }
+    }
+
     // Device status (indented)
     char status_line[256];
 
