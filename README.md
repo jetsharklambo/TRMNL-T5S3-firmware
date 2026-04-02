@@ -6,6 +6,7 @@ Custom firmware for the LilyGo T5 4.7" E-Paper Display (ESP32-S3) with WiFi prov
 **Last Updated**: April 1, 2026
 
 <div class="grid" markdown>
+   
 ![APmode](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/blob/77cf78748907396023bbbeb7e0252804f24f3f37/screens/apmode.jpg)
    
 ![Refresh](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/blob/77cf78748907396023bbbeb7e0252804f24f3f37/screens/TRMNL-t5s3.gif)
