@@ -40,26 +40,39 @@ Choose one of the two methods below:
    - Download the latest release from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)
    - Get the file: `trmnl-t5s3-factory.bin`
 
-2. **Open the web flasher**
-   - Visit: **[esptool.spacehuhn.com](https://esptool.spacehuhn.com/)**
-   - **Note**: Must use Chrome, Edge, or Opera (Firefox not supported)
+2. **Put device in bootloader mode**
 
-3. **Connect your device**
-   - Plug in your T5 device via USB-C cable
-   - Click **"Connect"** in the web tool
-   - Select your device's serial port from the list:
+   **Important**: The device sleeps most of the time, so you need to put it in bootloader mode first:
+
+   - Hold down the **BOOT** button on the device
+   - While holding BOOT, press and release the **RESET** button
+   - Release the **BOOT** button
+   - Device is now in bootloader mode (won't sleep, ready to flash)
+
+3. **Open the web flasher**
+   - Visit: **[https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/)**
+   - **Note**: Must use Chrome, Edge, or Opera (**NOT Safari** - not supported)
+
+4. **Connect your device**
+   - Plug in your T5 device via USB-C cable (if not already connected)
+   - Click **"Connect"** button
+   - Select your device's serial port from the popup:
      - **macOS**: `/dev/cu.usbserial-XXXX` or `/dev/cu.usbmodem-XXXX`
      - **Windows**: `COM3`, `COM4`, etc.
      - **Linux**: `/dev/ttyUSB0` or `/dev/ttyACM0`
 
-4. **Flash the firmware**
-   - **Address**: Enter `0` (or `0x0`)
+5. **Configure flash settings**
+   - **Flash Address**: Enter `0x0`
    - **File**: Click "Choose File" and select `trmnl-t5s3-factory.bin`
-   - Click **"Program"** or **"Flash"**
-   - Wait 30-60 seconds for upload to complete
+   - **Baudrate**: `921600` (or `460800` if you experience issues)
 
-5. **Done!**
-   - Unplug and replug the device (or press reset button)
+6. **Flash the firmware**
+   - Click **"Program"** button
+   - Wait 30-90 seconds for upload to complete
+   - You'll see progress in the console
+
+7. **Done!**
+   - Press the **RESET** button on the device to boot into the new firmware
    - Continue to "First Boot Setup" below
 
 ---
@@ -82,7 +95,16 @@ pip install esptool
 1. **Download the firmware**
    - Get `trmnl-t5s3-factory.bin` from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)
 
-2. **Find your USB port**
+2. **Put device in bootloader mode**
+
+   **Important**: The device sleeps most of the time, so put it in bootloader mode first:
+
+   - Hold down the **BOOT** button on the device
+   - While holding BOOT, press and release the **RESET** button
+   - Release the **BOOT** button
+   - Device is now in bootloader mode (ready to flash)
+
+3. **Find your USB port**
    ```bash
    # macOS
    ls /dev/cu.usbserial-* /dev/cu.usbmodem*
@@ -94,7 +116,7 @@ pip install esptool
    Get-WmiObject Win32_SerialPort | Select-Object DeviceID,Description
    ```
 
-3. **Flash the firmware**
+4. **Flash the firmware**
 
    Replace `/dev/cu.usbserial-XXXX` with your actual port:
 
@@ -108,8 +130,8 @@ pip install esptool
    esptool --chip esp32s3 --port COM3 --baud 921600 write_flash 0x0 trmnl-t5s3-factory.bin
    ```
 
-4. **Done!**
-   - Unplug and replug the device
+5. **Done!**
+   - Press the **RESET** button to boot into the new firmware
    - Continue to "First Boot Setup" below
 
 ---
@@ -195,22 +217,29 @@ Once your device is set up and running:
 
 ### Installation Issues
 
+**"Web flasher doesn't work" or "Tool won't open"**
+- **Safari is NOT supported** - Use Chrome, Edge, or Opera instead
+- Make sure you're using a Chromium-based browser
+- Try disabling browser extensions that might interfere with Web Serial API
+
 **"No serial port appears when I click Connect"**
+- **Make sure device is in bootloader mode first** (hold BOOT, press RESET, release BOOT)
 - Check your USB cable - many cables are charge-only and don't support data transfer
 - Try a different USB port on your computer
 - On Windows, install [CP210x drivers](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers)
 - Make sure no other program has the serial port open (Arduino IDE, PlatformIO, etc.)
 
 **"Flash failed" or "Timeout waiting for packet header"**
-- Lower the baud rate to `115200` (default is usually `921600`)
-- Press and hold the BOOT button on the device while starting the flash
+- **Most common issue**: Device not in bootloader mode - see installation step 2
+- Lower the baud rate to `460800` or `115200` (default is `921600`)
 - Try a different USB cable or USB port
 - On macOS, try both `/dev/cu.*` and `/dev/tty.*` variants of the port
+- Make sure the device is plugged in and powered on
 
 **"Device doesn't boot after flashing"**
-- Unplug and replug the USB cable
 - Press the RESET button on the device
-- Re-flash the firmware at address `0x0`
+- Unplug and replug the USB cable
+- Re-flash the firmware at address `0x0` making sure device is in bootloader mode first
 
 ### Setup Issues
 
