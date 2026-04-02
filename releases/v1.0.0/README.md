@@ -1,100 +1,83 @@
-# TRMNL-T5S3 Firmware v1.0.0
+# TRMNL T5S3 Firmware v1.1.0 - Installation Guide
 
-**Release Date**: December 17, 2025
-**Platform**: LilyGo T5 4.7" E-Paper Display (ESP32-S3)
+## Quick Install (Easiest Method - No Software Required!)
 
----
+Flash your TRMNL firmware directly from your web browser in 3 simple steps:
 
-## 📦 Release Contents
+### Prerequisites
+- **Chrome, Edge, or Opera browser** (Web Serial API required - Firefox not supported)
+- **USB-C cable** (must support data transfer, not just charging)
+- **LilyGo T5 4.7" E-Paper Display** (ESP32-S3)
 
-This directory contains the production-ready v1.0.0 firmware binaries for the TRMNL-T5S3 device:
+### Installation Steps
 
-| File | Size | Description |
-|------|------|-------------|
-| `firmware.bin` | 1.3MB | Main firmware binary (flash at 0x10000) |
-| `bootloader.bin` | 15KB | ESP32-S3 bootloader (flash at 0x0) |
-| `partitions.bin` | 3KB | Partition table (flash at 0x8000) |
-| `flash.sh` | 4KB | Automated flash script for macOS/Linux |
+1. **Download the firmware**
+   - Download `trmnl-t5s3-factory.bin` from this release
 
----
+2. **Open the web flasher**
+   - Visit: **[esptool.spacehuhn.com](https://esptool.spacehuhn.com/)**
 
-## 🚀 Quick Flash Instructions
+3. **Connect your device**
+   - Connect your T5 device via USB-C cable
+   - Click **"Connect"** button in the web tool
+   - Select your device's serial port from the popup
+     - macOS: Usually shows as `/dev/cu.usbserial-XXXX` or `/dev/cu.usbmodem-XXXX`
+     - Windows: Usually shows as `COM3`, `COM4`, etc.
+     - Linux: Usually shows as `/dev/ttyUSB0` or `/dev/ttyACM0`
 
-### Option 1: Automated Script (Recommended)
+4. **Flash the firmware**
+   - In the web tool interface:
+     - **Address**: `0x0` (or just `0`)
+     - **File**: Click "Choose File" and select `trmnl-t5s3-factory.bin`
+   - Click **"Program"** or **"Flash"** button
+   - Wait for the upload to complete (usually 30-60 seconds)
 
-```bash
-# Install esptool.py
-pip install esptool
+5. **Done!**
+   - Unplug and replug your device (or press the reset button)
+   - Your TRMNL device will boot up and enter AP mode on first boot
+   - Connect to WiFi network `TRMNL-XXXX` to configure
 
-# Make script executable
-chmod +x flash.sh
+### Troubleshooting
 
-# Run flash script (auto-detects USB port)
-./flash.sh
+**No serial port appears when clicking "Connect":**
+- Check your USB cable - many cables are charge-only and don't support data
+- Try a different USB port
+- On Windows, you may need [CP210x drivers](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers)
 
-# Or specify port manually
-./flash.sh /dev/cu.usbserial-XXXX
-```
+**Upload fails or times out:**
+- Lower the baud rate in settings to 115200 (default is usually 921600)
+- Try pressing and holding the BOOT button while connecting
+- Ensure no other program (like Arduino IDE or PlatformIO) has the serial port open
 
-### Option 2: Manual Flash
+**Device doesn't boot after flashing:**
+- Unplug and replug the device
+- Press the RESET button on the device
+- Re-flash the firmware at address `0x0`
 
-```bash
-# Install esptool.py
-pip install esptool
+### Alternative Installation Methods
 
-# Flash all components (replace PORT with your device port)
-PORT=/dev/cu.usbserial-XXXX
-
-esptool.py --chip esp32s3 --port $PORT --baud 921600 write_flash 0x0 bootloader.bin
-esptool.py --chip esp32s3 --port $PORT --baud 921600 write_flash 0x8000 partitions.bin
-esptool.py --chip esp32s3 --port $PORT --baud 921600 write_flash 0x10000 firmware.bin
-```
-
----
-
-## 📖 Documentation
-
-For complete installation instructions, troubleshooting, and configuration:
-
-- **[README.md](../../README.md)** - Complete project documentation
-- **[RELEASE_NOTES_v1.0.0.md](../../RELEASE_NOTES_v1.0.0.md)** - Release notes and installation guide
-- **[CHANGELOG.md](../../CHANGELOG.md)** - Detailed changelog
+If you can't use the web flasher (e.g., using Firefox), see the [main README](../../README.md) for alternative installation methods using command-line tools.
 
 ---
 
-## ✨ What's Included in v1.0.0
+## What's Included
 
-- ✅ WiFi captive portal with auto-setup
-- ✅ Automatic device registration with TRMNL backend
-- ✅ E-paper display rendering (PNG/BMP support)
-- ✅ OTA firmware updates with rollback protection
-- ✅ Battery monitoring and telemetry
-- ✅ Comprehensive logging (SPIFFS + SD card)
-- ✅ Button controls (5s soft reset, 15s hard reset)
-- ✅ Deep sleep power management
-- ✅ Dynamic server-controlled refresh rates
+This single factory binary contains:
+- **Bootloader** (ESP32-S3)
+- **Partition Table**
+- **TRMNL Firmware v1.1.0**
+
+All pre-configured and ready to flash at address `0x0`.
 
 ---
 
-## 🔧 Build Information
+## Next Steps After Installation
 
-- **Version**: 1.0.0
-- **Flash Usage**: 65.1% (1,366,233 / 2,097,152 bytes)
-- **RAM Usage**: 28.5% (93,320 / 327,680 bytes)
-- **Platform**: ESP32-S3
-- **Framework**: Arduino
-- **Build Tool**: PlatformIO
+1. **First Boot**: Device enters AP mode automatically
+2. **Connect**: Join WiFi network `TRMNL-XXXX` (password not required)
+3. **Configure**: Browser will auto-redirect to setup portal (or visit `192.168.4.1`)
+4. **Enter WiFi**: Provide your WiFi credentials
+5. **Auto-Register**: Device connects to TRMNL backend and registers automatically
+6. **Enjoy**: Your content will download and display!
 
----
-
-## 🐛 Support
-
-**Issues**: [GitHub Issues](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/issues)
-
-**Troubleshooting**: See [README.md](../../README.md#troubleshooting) for common issues and solutions
-
----
-
-## 📄 License
-
-This firmware is provided as-is for personal and commercial use.
+For detailed firmware features and troubleshooting, see the [main documentation](../../README.md).
