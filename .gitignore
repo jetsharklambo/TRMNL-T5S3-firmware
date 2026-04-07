@@ -1,0 +1,39 @@
+# PlatformIO
+.pio/
+.vscode/
+
+# Build artifacts
+*.bin
+*.elf
+*.map
+
+# Exception: Keep release binaries
+!releases/**/*.bin
+!*-release.bin
+!*-patched.bin
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Credentials and sensitive data
+**/wifi_config.h
+*credentials*
+*secret*
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Keep important directories
+!docs/
+!lib/
+!lib/FastEPD/
+!*.md
+!LICENSE
