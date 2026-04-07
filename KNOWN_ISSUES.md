@@ -1,44 +1,36 @@
 # Known Issues - TRMNL T5S3 FastEPD Firmware
 
-## No Known Critical Issues
+**Current Version**: v1.1.1
+**Last Updated**: 2026-04-07
 
-**Status:** All previously identified rendering and stability issues have been resolved in firmware v1.1.0.
+---
+
+## No Known Critical Issues ✅
+
+All previously identified rendering and stability issues have been resolved in firmware v1.1.1 with the upstream FastEPD fix.
 
 ---
 
 ## Fixed Issues (Historical Reference)
 
-### Issue 1: Display Rendering Artifacts (FIXED in v1.1.0)
+### Issue 1: Display Rendering Artifacts (FIXED in v1.1.1 - April 7, 2026)
 
-**Previous Symptom:** Repeated vertical strip on right edge, missing pixels on left edge
+**Symptom**: Duplicate vertical strip on right edge (~5-10px), heap corruption warnings
 
-**Root Cause:** FastEPD library v1.3.0 has buffer calculation bugs in 4BPP mode. The library incorrectly uses `/4` divisor (for 2-bit-per-pixel mode) instead of `/2` divisor (for 4-bit-per-pixel mode) in 15 locations across buffer allocation, indexing, and transfer operations.
+**Root Cause**: FastEPD v1.3.0 called `bbepBackupPlane()` in 4-bpp mode when it shouldn't. The "previous buffer" is only for differential updates in 1/2-bpp mode, but the library tried to copy it anyway in 4-bpp mode.
 
-**Resolution:** Applied local patches to `.pio/libdeps/T5_E_PAPER_S3_V7/FastEPD/src/FastEPD.inl`:
-- Fixed 13 buffer calculation instances (changed `/4` → `/2`)
-- Doubled DMA buffer allocation for proper double-buffering
-- Added 5px horizontal offset (IMAGE_X_OFFSET) for better centering
+**Resolution**: Upstream fix by FastEPD maintainer (commit 3e47f1e)
+- Added guard: `if (pState->mode == BB_MODE_4BPP) return;` in `bbepBackupPlane()`
+- Single-line fix, merged April 7, 2026
+- See: https://github.com/bitbank2/FastEPD/commit/3e47f1e
 
-**Impact:**
-- ✅ Eliminates rendering artifacts
-- ✅ Prevents heap corruption crashes
-- ✅ Enables stable deep sleep operation
-- ✅ Full 960x540 pixel display with correct positioning
+**Impact**:
+- ✅ Eliminates visual artifacts completely
+- ✅ Prevents heap corruption
+- ✅ Enables stable deep sleep
+- ✅ Official upstream solution (no vendored code)
 
-See CLAUDE.md "FastEPD Library Patches" section for complete technical details.
-
-### Issue 2: Heap Corruption Crash After Render (FIXED in v1.1.0)
-
-**Previous Symptom:** Device crashed during WiFi shutdown with "CORRUPT HEAP: Bad head at 0x3fcb5fa8"
-
-**Root Cause:** DMA buffer allocated only 480 bytes (`width/2`) but double-buffering with XOR toggle required 960 bytes (`width`) for 4BPP mode.
-
-**Resolution:** Line 1295 in FastEPD.inl - doubled DMA buffer allocation from `(pState->width / 2)` to `(pState->width)`
-
-**Impact:**
-- ✅ Device successfully enters deep sleep without crashes
-- ✅ Stable WiFi shutdown sequence
-- ✅ Minimal memory cost (~480 bytes, negligible on ESP32-S3 with 8MB PSRAM)
+**Historical Note**: v1.1.0 used vendored FastEPD with 15 patches as temporary workaround. v1.1.1 uses clean upstream fix.
 
 ---
 
@@ -60,22 +52,40 @@ See CLAUDE.md "FastEPD Library Patches" section for complete technical details.
 
 ---
 
-## FastEPD Library Dependency
+## Library Status
 
-**⚠️ IMPORTANT:** This firmware uses **locally patched FastEPD v1.3.0**.
+### FastEPD (E-Paper Driver)
 
-**DO NOT upgrade FastEPD library** without one of the following:
-1. Reapplying all 15 patches to the new version
-2. Confirming upstream library has fixed 4BPP buffer calculation bugs
-3. Extensive testing to verify rendering stability
+**Current**: Official upstream with fix (commit 3e47f1e)
+**Status**: ✅ **STABLE** - No known issues in 4-bpp mode
+**Source**: https://github.com/bitbank2/FastEPD.git#3e47f1e
 
-**For testing:** A comparison variant using unpatched public FastEPD library is available in `../TRMNL-T5S3-FastEPD-Public/` to demonstrate the bugs present in upstream library.
+### PNGdec (Image Decoder)
 
-See VARIANTS.md in parent directory for comparison details.
+**Current**: v1.1.6 from PlatformIO registry
+**Status**: ✅ **STABLE** - No known issues
+
+### ArduinoJson (API Parsing)
+
+**Current**: v6.21.3 from PlatformIO registry
+**Status**: ✅ **STABLE** - No known issues
 
 ---
 
-**Last Updated:** 2026-04-03
-**Firmware Version:** 1.1.0
-**FastEPD Version:** 1.3.0 (locally patched)
-**Panel Config:** BB_PANEL_EPDIY_V7
+## Reporting Issues
+
+**GitHub**: https://github.com/jetsharklambo/TRMNL-T5S3-firmware/issues
+**FastEPD Issues**: https://github.com/bitbank2/FastEPD/issues
+
+When reporting issues, please include:
+- Firmware version (from serial output)
+- Hardware model (LilyGo T5S3 Pro)
+- Serial output logs
+- Steps to reproduce
+- Photos if visual issue
+
+---
+
+**Last Updated**: 2026-04-07
+**Firmware Version**: v1.1.1-upstream-fixed
+**FastEPD Version**: commit 3e47f1e (with 4-bpp fix)

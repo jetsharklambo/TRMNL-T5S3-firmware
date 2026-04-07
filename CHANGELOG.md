@@ -5,6 +5,33 @@ All notable changes to the TRMNL-T5S3 firmware will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-04-07
+
+### 🎉 Upstream FastEPD Fix
+
+This release removes the vendored FastEPD library and uses the **official upstream fix** from the FastEPD maintainer.
+
+### Changed
+- **FastEPD Library**: Now using official upstream with 4-bpp fix (commit 3e47f1e)
+  - Replaced vendored library with 15 patches
+  - Single-line guard in `bbepBackupPlane()`: `if (pState->mode == BB_MODE_4BPP) return;`
+  - Cleaner, maintainable solution
+  - See: https://github.com/bitbank2/FastEPD/commit/3e47f1e
+
+### Fixed
+- **Visual Artifacts**: Eliminated duplicate strip on right edge (~5-10px)
+- **Heap Corruption**: No more corruption warnings during WiFi shutdown
+- **Deep Sleep Stability**: Reliable sleep/wake cycles
+
+### Removed
+- Vendored `lib/FastEPD/` directory with 15 patches
+- PATCHES.md and related patch documentation (archived in `docs/archive/`)
+
+### Technical Details
+- **Build Size**: 1.1 MB firmware (Flash: 54.8%, RAM: 29.7%)
+- **Library**: https://github.com/bitbank2/FastEPD.git#3e47f1e
+- **Tested**: Hardware validated on LilyGo T5S3 Pro - artifact-free rendering confirmed
+
 ## [1.0.0] - 2025-12-17
 
 ### 🎉 First Production Release

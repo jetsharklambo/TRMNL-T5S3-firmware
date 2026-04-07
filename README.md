@@ -1,82 +1,20 @@
-# TRMNL Firmware for LilyGo T5S3 Pro (with FastEPD Patches)
+# TRMNL Firmware for LilyGo T5S3 Pro
 
-> **Status**: Reference implementation for upstream contribution to TRMNL
-> **Upstream Target**: https://github.com/usetrmnl/trmnl-firmware
-> **Pull Request**: [Pending submission]
-> **FastEPD Bug**: [To be filed]
+TRMNL firmware for the LilyGo T5S3 Pro (ESP32-S3) e-paper display. Displays your TRMNL dashboard content on a beautiful 4.7" e-ink screen with clean, artifact-free rendering.
 
-Production-ready TRMNL firmware for LilyGo T5S3 Pro (ESP32-S3) e-paper display, including vendored FastEPD library with 4-bpp buffer calculation fixes.
-
-**Firmware Version**: 1.1.0-patched
-**Last Updated**: April 6, 2026
+**[Download Latest Firmware](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)** • **Version 1.1.1**
 
 ---
 
-## ⚠️ This Version: FastEPD Patches Applied
+## See It In Action
 
-This release includes **vendored FastEPD library with patches applied**. The display artifact has been fixed - you will see clean rendering with no duplicate strip on the right edge.
+**TRMNL plugins in action:**
 
-**Binary to flash**: `trmnl-t5s3-v1.1.0-patched.bin` (flash to address `0x0`)
+![TRMNL Display Demo](screens/TRMNL-t5s3.gif)
 
----
+**First-time setup (AP mode):**
 
-## 🎯 Purpose
-
-This repository serves as:
-
-- ✅ **Working reference implementation** for upstream TRMNL contribution
-- ✅ **Proof of concept** showing FastEPD patches resolve rendering artifacts
-- ✅ **Community resource** for T5S3 users who want clean rendering TODAY
-- ✅ **Portfolio showcase** of embedded systems development and debugging
-
-## ⚠️ Relationship to Official TRMNL Firmware
-
-This is **NOT a fork** or competing version. It's a **contribution being submitted upstream**.
-
-**When to use this repo**:
-- ✅ You want T5S3 support NOW with clean rendering (no artifacts)
-- ✅ You want to see the FastEPD patches in action
-- ✅ You're interested in the technical implementation details
-
-**When to use official TRMNL**:
-- ✅ After upstream PR is merged (this repo will be archived)
-- ✅ You want other hardware variants (ESP32-C3, XIAO, etc.)
-
-**Goal**: Get this merged upstream, then everyone uses official TRMNL firmware.
-
----
-
-## 🐛 What's Different: FastEPD Patches
-
-This version includes a **vendored FastEPD library** with fixes for the 4-bpp buffer calculation bug affecting 960×540 displays.
-
-### The Bug
-- **Symptom**: Duplicate ~5-10px vertical strip on right edge
-- **Cause**: FastEPD v1.3.0 uses `/4` divisor (correct for 2-bpp) instead of `/2` (correct for 4-bpp)
-- **Impact**: Visual artifact on 960×540 displays in 4-bpp mode
-
-### The Fix
-- **15 surgical patches** to `FastEPD/src/FastEPD.inl`
-- **Buffer calculations** corrected for 4-bpp mode
-- **Zero performance cost**, minimal memory increase (~480 bytes)
-- **No behavior change** for 1-bpp or 2-bpp modes
-
-📝 **Complete technical details**: See [`lib/FastEPD/PATCHES.md`](lib/FastEPD/PATCHES.md)
-
-### Status
-- ✅ Patches tested extensively on T5S3 Pro hardware
-- 🚀 Bug report to be filed with FastEPD maintainer
-- 📦 Vendored library allows immediate use while awaiting upstream fix
-
----
-
-## 🔗 Links
-
-- **Upstream TRMNL**: https://github.com/usetrmnl/trmnl-firmware
-- **My Pull Request**: [Link when submitted]
-- **FastEPD Bug Report**: [Link when filed]
-- **Technical Blog Post**: [Link when published]
-- **Hardware**: [LilyGo T5S3 Pro](https://www.lilygo.cc/products/t5-4-7-inch-e-paper-v2-3)
+![AP Mode Setup](screens/apmode.jpg)
 
 ---
 
@@ -113,7 +51,7 @@ Choose one of the two methods below:
 
 1. **Download the firmware**
    - Download the latest release from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)
-   - Get the file: `trmnl-t5s3-v1.1.0-patched.bin`
+   - Get the file: `trmnl-t5s3-v1.1.1-factory.bin`
 
 2. **Put device in bootloader mode**
 
@@ -145,7 +83,7 @@ Choose one of the two methods below:
 
 5. **Configure flash settings**
    - **Flash Address**: Enter `0x0` ⚠️ **Important: Must be 0x0, not 0x1000**
-   - **File**: Click "Choose File" and select `trmnl-t5s3-v1.1.0-patched.bin`
+   - **File**: Click "Choose File" and select `trmnl-t5s3-v1.1.1-factory.bin`
    - **Baudrate**: `921600` (or `460800` if you experience issues)
 
 6. **Flash the firmware**
@@ -175,7 +113,7 @@ pip install esptool
 #### Installation Steps
 
 1. **Download the firmware**
-   - Get `trmnl-t5s3-v1.1.0-patched.bin` from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)
+   - Get `trmnl-t5s3-v1.1.1-factory.bin` from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)
 
 2. **Put device in bootloader mode**
 
@@ -211,12 +149,12 @@ pip install esptool
 
    ```bash
    esptool --chip esp32s3 --port /dev/cu.usbserial-XXXX --baud 921600 \
-     write_flash 0x0 trmnl-t5s3-v1.1.0-patched.bin
+     write_flash 0x0 trmnl-t5s3-v1.1.1-factory.bin
    ```
 
    **Windows example**:
    ```bash
-   esptool --chip esp32s3 --port COM3 --baud 921600 write_flash 0x0 trmnl-t5s3-v1.1.0-patched.bin
+   esptool --chip esp32s3 --port COM3 --baud 921600 write_flash 0x0 trmnl-t5s3-v1.1.1-factory.bin
    ```
 
 5. **Done!**
@@ -381,52 +319,6 @@ esptool --chip esp32s3 --port /dev/cu.usbserial-XXXX erase_flash
 ```
 Then re-flash the firmware.
 
-## For Developers
-
-If you want to build from source or modify the firmware:
-
-1. Install PlatformIO
-2. Clone the repository
-3. Build: `~/.platformio/penv/bin/platformio run`
-4. Flash: `~/.platformio/penv/bin/platformio run -t upload`
-5. Monitor: `~/.platformio/penv/bin/platformio device monitor`
-
-See the included technical documentation for development details.
-
----
-
-## 📖 Documentation
-
-- **[Architecture Guide](CLAUDE.md)** - Complete technical deep-dive into firmware design
-- **[Known Issues](KNOWN_ISSUES.md)** - Current limitations and workarounds
-- **[FastEPD Patches](lib/FastEPD/PATCHES.md)** - Detailed patch documentation
-- **[Contributing](CONTRIBUTING.md)** - Development guidelines for contributors
-- **[Flash Instructions](FLASH_INSTRUCTIONS.md)** - Detailed step-by-step flashing guide
-
----
-
-## 🎓 What This Demonstrates
-
-This project showcases:
-
-- **Embedded Systems**: ESP32-S3 firmware development, power optimization, deep sleep
-- **Driver Development**: E-paper display integration, FastEPD library debugging
-- **Buffer Overflow Debugging**: Diagnosed and fixed 4-bpp buffer calculation errors
-- **System Architecture**: Modular design (~18,000 lines across 14 modules)
-- **Technical Documentation**: Comprehensive guides for users and developers
-- **Open Source Collaboration**: Upstream contribution workflow
-
----
-
-## 📊 Project Stats
-
-- **Lines of Code**: ~18,000 across 14 modules
-- **Languages**: C++ (ESP32), HTML/CSS (captive portal)
-- **Build System**: PlatformIO + Arduino framework
-- **Target Hardware**: ESP32-S3 (LilyGo T5S3 Pro)
-- **Memory Usage**: Flash 54.7%, RAM 29.7%
-- **Features**: WiFi setup, auto-registration, OTA updates, deep sleep, battery monitoring, comprehensive logging
-
 ---
 
 ## Support & Issues
@@ -452,12 +344,8 @@ This project showcases:
 
 ## 📜 License
 
-GPL-3.0 (matching TRMNL upstream)
+GPL-3.0 License
 
 This firmware is derived from the TRMNL project. FastEPD library by Larry Bank.
 
 See LICENSE file for details.
-
----
-
-**Note**: Once the upstream PR is merged, this repository will be archived and users should migrate to the official TRMNL firmware repository at https://github.com/usetrmnl/trmnl-firmware
