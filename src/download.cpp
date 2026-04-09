@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <SPIFFS.h>
+#include "test_config.h"
 
 // ============================================================================
 // Constants
@@ -18,6 +19,11 @@
 
 #define DOWNLOAD_MAX_RETRIES 3
 static const uint32_t DOWNLOAD_RETRY_DELAYS[DOWNLOAD_MAX_RETRIES] = {10000, 20000, 30000};
+
+#if TEST_DOWNLOAD_ERROR
+// Access boot counter from main.cpp
+extern int test_boot_count;
+#endif
 
 // ============================================================================
 // Internal Helper Function
@@ -114,6 +120,44 @@ download_result_t download_image(const char* url, const char* dest_path) {
 
     Serial.print("[DOWNLOAD] Fetching: ");
     Serial.println(url);
+
+#if TEST_DOWNLOAD_ERROR
+    // Only fail on second boot (test_boot_count >= 1)
+    if (test_boot_count >= 1) {
+        // Force download to fail all attempts (simulates network error)
+        Serial.println("\n[TEST] ===== DOWNLOAD ERROR TEST MODE ACTIVE =====");
+        Serial.println("[TEST] Simulating complete download failure with retry logic...");
+
+        for (int attempt = 0; attempt < DOWNLOAD_MAX_RETRIES; attempt++) {
+            result.attempts_made = attempt + 1;
+
+            Serial.print("[TEST] Simulated download attempt ");
+            Serial.print(attempt + 1);
+            Serial.print("/");
+            Serial.print(DOWNLOAD_MAX_RETRIES);
+            Serial.println(" - FAILED");
+
+            // Simulate attempt time
+            delay(1000);
+
+            if (attempt < DOWNLOAD_MAX_RETRIES - 1) {
+                uint32_t delay_ms = DOWNLOAD_RETRY_DELAYS[attempt];
+                Serial.print("[DOWNLOAD] Failed - waiting ");
+                Serial.print(delay_ms / 1000);
+                Serial.println("s before retry...");
+                delay(delay_ms);
+            } else {
+                Serial.println("[DOWNLOAD] All retries exhausted - giving up");
+            }
+        }
+
+        result.success = false;
+        Serial.println("[TEST] Download error test complete - returning failure");
+        return result;
+    } else {
+        Serial.println("[TEST] First boot - allowing download to succeed normally");
+    }
+#endif
 
     // Try up to DOWNLOAD_MAX_RETRIES attempts
     for (int attempt = 0; attempt < DOWNLOAD_MAX_RETRIES; attempt++) {

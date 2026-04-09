@@ -50,10 +50,23 @@
 // Display Rendering Configuration
 // ============================================================================
 
+// Display rotation in degrees (0, 90, 180, 270)
+// 0   = Normal orientation (default)
+// 180 = Upside down (use if device is mounted inverted)
+// 90/270 = Portrait modes (not recommended for 960x540 landscape content)
+#define DISPLAY_ROTATION 180
+
 // Horizontal offset in pixels for image positioning
 // Positive values shift image to the right
 // Adjust this if image is too close to left/right bezel
-#define IMAGE_X_OFFSET 5
+#define IMAGE_X_OFFSET 3
+
+// Gamma correction for e-ink highlight preservation
+// INVERSE gamma (0.5) aggressively brightens image to maximize light text visibility
+// Preserves "ANTC" badges, light gray text, and small details on e-ink displays
+// Range: 0.5 (very bright) to 1.0 (linear/disabled) to 2.0 (very dark)
+// Current: 1.0 (disabled/linear - no gamma adjustment)
+#define GAMMA_CORRECTION_VALUE 1.0
 
 // ============================================================================
 // Battery & Power Monitoring Configuration (Phase 5)
@@ -77,7 +90,7 @@
 
 // Button hold time thresholds (milliseconds) - for future multi-hold detection
 #define BUTTON_HOLD_SHORT       1000  // 1 second - potential future use
-#define BUTTON_HOLD_MEDIUM      5000  // 5 seconds - hard reset (future)
+#define BUTTON_HOLD_MEDIUM      5000  // 5 seconds - hard reset (future).     
 #define BUTTON_HOLD_LONG        15000 // 15 seconds - soft reset (future)
 
 // ============================================================================

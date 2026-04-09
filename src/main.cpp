@@ -55,6 +55,17 @@
 #include "device_status.h" // Phase 6: Device status tracking
 #include "ota.h"           // Phase 7: OTA firmware updates
 #include "api-client/submit_log.h"  // Phase 7: API log submission
+#include "test_config.h"   // Test/debug configuration
+
+// ============================================================================
+// RTC Memory for Test State Tracking
+// ============================================================================
+// RTC memory persists across deep sleep but resets on power cycle
+// Used to track boot count for error injection testing
+
+#if (TEST_DOWNLOAD_ERROR || TEST_DECODE_ERROR || TEST_WIFI_ERROR)
+RTC_DATA_ATTR int test_boot_count = 0;
+#endif
 
 // ============================================================================
 // Button Handler (Phase 5)
@@ -204,6 +215,17 @@ void app_main() {
     Serial.println("\n\n================================");
     Serial.println("TRMNL T5S3 Pro - Main Firmware");
     Serial.println("================================");
+
+#if (TEST_DOWNLOAD_ERROR || TEST_DECODE_ERROR || TEST_WIFI_ERROR)
+    Serial.print("\n[TEST] Boot count: ");
+    Serial.println(test_boot_count);
+    if (test_boot_count == 0) {
+        Serial.println("[TEST] First boot - normal operation, error will trigger on next boot");
+    } else {
+        Serial.println("[TEST] Second+ boot - error injection will activate");
+    }
+#endif
+
     delay(1000);
 
     // Phase 5: Resume button polling task after waking from sleep
@@ -308,10 +330,8 @@ void app_main() {
             // Increment WiFi failure counter
             uint8_t fail_count = nvram_increment_wifi_failure_count();
 
-            // Show failure message with attempt count
-            char fail_msg[32];
-            snprintf(fail_msg, sizeof(fail_msg), "WiFi Failed (%d/3)", fail_count);
-            display_text(fail_msg);
+            // Display WiFi error icon (no text, preserves previous display)
+            display_wifi_error_icon();
 
             // Check if we've exceeded maximum failures
             if (fail_count >= 3) {
@@ -598,10 +618,21 @@ void app_main() {
             // Submit download failure log to server
             submit_error_log_to_server();
 
-            // Display failure message with attempt count
-            char fail_msg[32];
-            snprintf(fail_msg, sizeof(fail_msg), "Download Failed (%d/3)", download_result.attempts_made);
-            display_text(fail_msg);
+#if TEST_DOWNLOAD_ERROR
+            // In test mode, clear display first so error icon is visible
+            Serial.println("[TEST] Clearing display before showing error icon...");
+            display_clear();
+            delay(2000);
+#endif
+
+            // Display WiFi error icon (download failures usually WiFi-related)
+            display_wifi_error_icon();
+
+#if TEST_DOWNLOAD_ERROR
+            Serial.println("[TEST] Download error icon displayed");
+            Serial.println("[TEST] Observe e-paper for WiFi-off icon in lower right");
+            delay(10000);  // Hold for observation
+#endif
 
             wifi_disconnect_and_poweroff();
             delay(5000);
@@ -615,6 +646,44 @@ void app_main() {
         display_image(image_file);
         logging_write(LOG_INFO, "Image displayed on e-paper");
     }
+
+    // ========================================================================
+    // TEST INJECTION: WiFi Error (compile-time test flag)
+    // ========================================================================
+#if TEST_WIFI_ERROR
+    // Only trigger error on second boot (after first image displayed)
+    if (test_boot_count >= 1) {
+        Serial.println("\n[TEST] ===== WIFI ERROR TEST MODE ACTIVE =====");
+        Serial.println("[TEST] First cycle completed successfully");
+        Serial.println("[TEST] Now forcing WiFi error condition...");
+
+        // Wait to see successful image
+        delay(3000);
+
+        // Clear display to white (ensures framebuffer is initialized)
+        Serial.println("[TEST] Clearing display to prepare for error icon...");
+        display_clear();
+        delay(2000);
+
+        // Force WiFi disconnect to simulate connection loss
+        WiFi.disconnect(true);
+        delay(1000);
+
+        debug_wifi_status();  // Show WiFi status after disconnect
+
+        Serial.println("[TEST] Triggering WiFi error display...");
+        // Display WiFi error icon overlay (on white background)
+        display_wifi_error_icon();
+
+        Serial.println("[TEST] WiFi error icon displayed");
+        Serial.println("[TEST] Observe e-paper display for WiFi-off icon in lower right");
+
+        // Hold for observation
+        delay(10000);
+    } else {
+        Serial.println("\n[TEST] First boot - WiFi error will activate on next wake");
+    }
+#endif
 
     // Cleanup before sleep
     wifi_disconnect_and_poweroff();
@@ -641,9 +710,23 @@ void app_main() {
 sleep_now:
     // Phase 4: Load dynamic refresh rate from NVRAM (or use default)
     uint16_t refresh_rate = nvram_get_refresh_rate();
+
+#if (TEST_DOWNLOAD_ERROR || TEST_DECODE_ERROR || TEST_WIFI_ERROR)
+    // Override sleep time for faster testing
+    refresh_rate = TEST_SLEEP_SECONDS;
+    Serial.print("[TEST] Using test sleep time: ");
+    Serial.print(refresh_rate);
+    Serial.println(" seconds");
+
+    // Increment boot counter for next wake
+    test_boot_count++;
+    Serial.print("[TEST] Incremented boot count to: ");
+    Serial.println(test_boot_count);
+#else
     Serial.print("[MAIN] Using refresh rate: ");
     Serial.print(refresh_rate);
     Serial.println(" seconds");
+#endif
 
     // Log entering sleep
     char sleep_msg[64];
@@ -667,7 +750,7 @@ sleep_now:
  */
 void setup() {
     Serial.begin(115200);
-    delay(2000);  // Wait for serial to stabilize
+    // Removed 2-second delay for faster boot
 
     // Phase 7: Mark OTA update as valid (prevent automatic rollback)
     // This tells the ESP32 bootloader that the current firmware is working

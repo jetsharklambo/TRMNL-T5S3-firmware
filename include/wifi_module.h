@@ -45,4 +45,20 @@ int wifi_get_rssi();
  */
 bool wifi_is_connected();
 
+/**
+ * @brief Convert WiFi status code to human-readable string
+ *
+ * @param status WiFi status code from WiFi.status()
+ * @return Readable string (e.g., "Connected", "No SSID Available")
+ */
+const char* wifi_status_string(wl_status_t status);
+
+/**
+ * @brief Print current WiFi status to Serial (debug helper)
+ *
+ * Only prints if DEBUG_WIFI_STATUS is enabled in test_config.h
+ * Example output: "[WIFI_DEBUG] Status: Connected (3)"
+ */
+void debug_wifi_status();
+
 #endif // WIFI_MODULE_H

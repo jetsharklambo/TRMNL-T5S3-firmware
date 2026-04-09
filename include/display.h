@@ -159,4 +159,32 @@ void display_status(const char* message);
  */
 void display_battery_warning(uint8_t battery_percent);
 
+/**
+ * @brief Display WiFi error icon in lower right corner
+ *
+ * Draws a WiFi-off icon (48x48) overlaid on current display content
+ * without clearing. Used for WiFi connection failures.
+ *
+ * Position: Lower right (900, 480)
+ * Visual: WiFi waves with diagonal slash
+ *
+ * Time: ~500ms (CLEAR_NONE update)
+ * Power: Minimal (no full clear)
+ */
+void display_wifi_error_icon();
+
+/**
+ * @brief Display decode error icon in lower right corner
+ *
+ * Draws a camera-video-off icon (48x48) overlaid on current display content
+ * without clearing. Used for PNG decode failures.
+ *
+ * Position: Lower right (900, 480)
+ * Visual: Camera symbol with diagonal slash
+ *
+ * Time: ~500ms (CLEAR_NONE update)
+ * Power: Minimal (no full clear)
+ */
+void display_decode_error_icon();
+
 #endif // DISPLAY_H

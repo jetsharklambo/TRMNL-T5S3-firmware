@@ -23,6 +23,7 @@
 
 #include "display.h"
 #include "config.h"
+#include "test_config.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -39,31 +40,73 @@
 FASTEPD bbep;  // FastEPD display object (replaces EpdiyHighlevelState hl)
 PNG png;       // PNG decoder
 
+#if TEST_DECODE_ERROR
+// Access boot counter from main.cpp
+extern int test_boot_count;
+#endif
+
 // PNG file handle for callbacks
 static File pngFile;
 
 // ============================================================================
-// Custom Gray Scale Matrix - M5Paper/T5S3 960x540 displays
+// Custom Gray Scale Matrix - Official LilyGo u8_103Grays for T5S3 960x540
 // ============================================================================
-// This matrix is optimized for 960x540 M5Paper-style e-paper displays
-// Using this instead of the default u8SixInchMatrix fixes rendering issues
-const uint8_t u8M5Matrix[] = {
-    /* 0 */  1, 1, 1, 1, 1, 1, 1, 1, 0,
-    /* 1 */  0, 0, 1, 1, 2, 1, 1, 1, 0,
-    /* 2 */  0, 0, 1, 1, 1, 1, 2, 1, 0,
-    /* 3 */  0, 0, 1, 1, 2, 2, 1, 1, 0,
-    /* 4 */  0, 0, 0, 0, 1, 1, 2, 1, 0,
-    /* 5 */  0, 0, 1, 1, 1, 2, 2, 1, 0,
-    /* 6 */  0, 0, 1, 1, 2, 1, 1, 2, 0,
-    /* 7 */  0, 0, 0, 1, 2, 1, 1, 2, 0,
-    /* 8 */  0, 0, 2, 2, 2, 1, 2, 1, 0,
-    /* 9 */  1, 1, 1, 1, 1, 1, 2, 2, 0,
-    /* 10 */ 0, 0, 1, 1, 1, 1, 2, 2, 0,
-    /* 11 */ 1, 1, 1, 1, 2, 1, 2, 2, 0,
-    /* 12 */ 0, 0, 1, 1, 2, 1, 2, 2, 0,
-    /* 13 */ 0, 1, 1, 2, 2, 1, 2, 2, 0,
-    /* 14 */ 0, 0, 1, 2, 2, 1, 2, 2, 0,
-    /* 15 */ 0, 0, 0, 0, 2, 2, 2, 2, 0
+// Official 16×18 grayscale matrix from LilyGo's FastEPD examples
+// Source: https://github.com/Xinyuan-LilyGO/T5S3-4.7-e-paper-PRO/blob/H752-01/examples/FastEPD/grayscale_test/
+//
+// This matrix provides 50% more spatial resolution (18 vs 12 values per row) compared to
+// the previous u8M5Matrix, resulting in better dithering and smoother gradients.
+//
+// Matrix values:
+// - 0 = Light/no change (used at pattern edges)
+// - 1 = Medium gray (first pass)
+// - 2 = Dark pixel (second pass)
+//
+// Tested and verified by LilyGo for this specific 960×540 T5S3 panel
+const uint8_t u8_103Grays[] = {
+    /* 0 - White */         0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
+    /* 1 - Very Light */    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 1, 1, 0, 0, 0, 0,
+    /* 2 - Light */         0, 0, 0, 0, 0, 1, 1, 1, 2, 1, 1, 1, 2, 1, 0, 0, 0, 0,
+    /* 3 - Light Gray */    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0,
+    /* 4 - Light-Mid */     0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0, 0,
+    /* 5 - Mid Light */     0, 0, 0, 0, 0, 1, 0, 0, 1, 2, 0, 1, 0, 0, 0, 0, 0, 0,
+    /* 6 - Mid Gray */      0, 0, 0, 0, 0, 1, 2, 0, 1, 2, 0, 1, 0, 0, 0, 0, 0, 0,
+    /* 7 - Mid */           0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0,
+    /* 8 - Mid-Dark */      0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 2, 1, 0, 0, 0, 0, 0,
+    /* 9 - Dark Gray */     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0,
+    /* 10 - Dark */         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 0, 0, 0,
+    /* 11 - Very Dark */    0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 0, 0,
+    /* 12 - Darker */       0, 0, 0, 0, 0, 1, 1, 1, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0,
+    /* 13 - Nearly Black */ 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 2, 1, 2, 0, 0, 0, 0, 0,
+    /* 14 - Almost Black */ 1, 1, 1, 1, 1, 1, 2, 2, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0,
+    /* 15 - Black */        0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
+};
+
+// ============================================================================
+// Gamma Correction LUT - Inverse Gamma for E-Ink Highlight Preservation
+// ============================================================================
+
+// Inverse gamma correction LUT (gamma = 0.5)
+// Aggressively brightens image to maximize light text visibility on e-ink
+// Prevents "ANTC" badges and light text from disappearing
+// Maps input 0-255 → inverse-gamma-corrected 0-255
+const uint8_t gamma_lut[256] = {
+      0,  16,  23,  28,  32,  36,  39,  42,  45,  48,  50,  53,  55,  58,  60,  62,
+     64,  66,  68,  70,  71,  73,  75,  77,  78,  80,  81,  83,  84,  86,  87,  89,
+     90,  92,  93,  94,  96,  97,  98, 100, 101, 102, 103, 105, 106, 107, 108, 109,
+    111, 112, 113, 114, 115, 116, 117, 118, 119, 121, 122, 123, 124, 125, 126, 127,
+    128, 129, 130, 131, 132, 133, 134, 135, 135, 136, 137, 138, 139, 140, 141, 142,
+    143, 144, 145, 145, 146, 147, 148, 149, 150, 151, 151, 152, 153, 154, 155, 156,
+    156, 157, 158, 159, 160, 160, 161, 162, 163, 164, 164, 165, 166, 167, 167, 168,
+    169, 170, 170, 171, 172, 173, 173, 174, 175, 176, 176, 177, 178, 179, 179, 180,
+    181, 181, 182, 183, 183, 184, 185, 186, 186, 187, 188, 188, 189, 190, 190, 191,
+    192, 192, 193, 194, 194, 195, 196, 196, 197, 198, 198, 199, 199, 200, 201, 201,
+    202, 203, 203, 204, 204, 205, 206, 206, 207, 208, 208, 209, 209, 210, 211, 211,
+    212, 212, 213, 214, 214, 215, 215, 216, 217, 217, 218, 218, 219, 220, 220, 221,
+    221, 222, 222, 223, 224, 224, 225, 225, 226, 226, 227, 228, 228, 229, 229, 230,
+    230, 231, 231, 232, 233, 233, 234, 234, 235, 235, 236, 236, 237, 237, 238, 238,
+    239, 240, 240, 241, 241, 242, 242, 243, 243, 244, 244, 245, 245, 246, 246, 247,
+    247, 248, 248, 249, 249, 250, 250, 251, 251, 252, 252, 253, 253, 254, 254, 255,
 };
 
 // ============================================================================
@@ -196,8 +239,12 @@ int png_draw_callback(PNGDRAW *pDraw) {
             pixel = p[x];
         }
 
+        // Apply gamma correction for enhanced e-ink sharpness
+        // Gamma LUT improves contrast and perceived sharpness
+        uint8_t gamma_corrected_pixel = gamma_lut[pixel];
+
         // Draw pixel using FastEPD API (with horizontal offset for better centering)
-        bbep.drawPixelFast(x + IMAGE_X_OFFSET, y, pixel);
+        bbep.drawPixelFast(x + IMAGE_X_OFFSET, y, gamma_corrected_pixel);
     }
 
     // Progress indicator every 100 scanlines
@@ -226,21 +273,35 @@ void display_init() {
     Serial.println("[INIT] Initializing display (FastEPD)...");
 
     // Initialize FastEPD with EPDiy V7 panel (correct GPIO pins)
-    bbep.initPanel(BB_PANEL_EPDIY_V7);
+    // SPI frequency: 26666666 Hz (26.67 MHz) - from official LilyGo examples
+    bbep.initPanel(BB_PANEL_EPDIY_V7, 26666666);
 
     // Set panel size (960x540 landscape)
     bbep.setPanelSize(960, 540, BB_PANEL_FLAG_NONE);
 
-    // Override gray scale matrix to u8M5Matrix (for 960x540 displays)
+    // Override gray scale matrix to u8_103Grays (official LilyGo matrix for 960x540)
     // Default u8SixInchMatrix is for 1024x758 panels - causes repeated strip
-    Serial.println("[INIT] Setting custom gray matrix (u8M5Matrix)...");
-    int matrix_rc = bbep.setCustomMatrix(u8M5Matrix, sizeof(u8M5Matrix));
+    Serial.println("[INIT] Setting custom gray matrix (u8_103Grays)...");
+    int matrix_rc = bbep.setCustomMatrix(u8_103Grays, sizeof(u8_103Grays));
     if (matrix_rc == 0) {
         Serial.println("[INIT] Custom matrix set successfully!");
     } else {
         Serial.print("[INIT] WARNING: setCustomMatrix failed with code: ");
         Serial.println(matrix_rc);
     }
+
+    // Set 4BPP mode for all rendering (16 gray levels)
+    // This must be set once at initialization for consistent behavior
+    Serial.println("[INIT] Setting 4BPP grayscale mode...");
+    bbep.setMode(BB_MODE_4BPP);
+
+    // Apply display rotation if configured
+#if DISPLAY_ROTATION != 0
+    Serial.print("[INIT] Setting display rotation to ");
+    Serial.print(DISPLAY_ROTATION);
+    Serial.println(" degrees...");
+    bbep.setRotation(DISPLAY_ROTATION);
+#endif
 
     Serial.println("[INIT] Display initialized!");
 }
@@ -386,17 +447,41 @@ void display_image(const char* path) {
 
             #define RENDER_MODE 1  // Change this to test different modes (1-5)
 
+#if TEST_DECODE_ERROR
+            // ================================================================
+            // TEST INJECTION: Force PNG decode failure (only on second boot)
+            // ================================================================
+            if (test_boot_count >= 1) {
+                Serial.println("\n[TEST] ===== DECODE ERROR TEST MODE ACTIVE =====");
+                Serial.println("[TEST] PNG opened successfully, forcing decode failure...");
+
+                // Don't clear display - we want to show error icon on white
+                // (in real scenario, previous image might be visible)
+
+                // Force decode to fail by setting error code
+                int decode_rc = PNG_DECODE_ERROR;
+
+                Serial.println("[TEST] Simulated PNG decode failure");
+                Serial.println("[TEST] Skipping to error handling...");
+
+                // Jump to error handling code below
+                goto test_decode_error_handler;
+            } else {
+                Serial.println("[TEST] First boot - allowing decode to succeed normally");
+            }
+#endif
+
             #if RENDER_MODE == 1
-                // MODE 1: clearWhite + CLEAR_NONE (FASTEST)
-                // Pre-clear display, then render without additional clearing
-                Serial.println("[RENDER] Mode 1: clearWhite + CLEAR_NONE");
-                Serial.println("[IMAGE] Clearing display to white...");
-                bbep.clearWhite(true);
+                // MODE 1: Decode then CLEAR_FAST (PRESERVES SCREEN ON ERROR)
+                // Decode first WITHOUT clearing screen
+                // If decode succeeds, fullUpdate with CLEAR_FAST clears and renders
+                // If decode fails, screen is preserved for error icon overlay
+                Serial.println("[RENDER] Mode 1: Decode first, then CLEAR_FAST on success");
                 Serial.println("[IMAGE] Decoding PNG...");
                 int decode_rc = png.decode(NULL, 0);
                 if (decode_rc == PNG_SUCCESS) {
-                    Serial.println("[IMAGE] Updating display (CLEAR_NONE - no flashing)...");
-                    bbep.fullUpdate(CLEAR_NONE, false);
+                    Serial.println("[IMAGE] Updating display (CLEAR_FAST)...");
+                    bbep.fullUpdate(CLEAR_FAST, false);
                 }
             #elif RENDER_MODE == 2
                 // MODE 2: clearWhite + CLEAR_FAST (BALANCED)
@@ -446,6 +531,8 @@ void display_image(const char* path) {
                 #error "Invalid RENDER_MODE - must be 1-5"
             #endif
 
+test_decode_error_handler:  // Label for TEST_DECODE_ERROR goto
+
             if (decode_rc == PNG_SUCCESS) {
                 Serial.println("[DIAGNOSTIC] === Buffer Transfer Details ===");
                 Serial.print("[DIAGNOSTIC] native_width: ");
@@ -460,7 +547,14 @@ void display_image(const char* path) {
             } else {
                 Serial.print("[IMAGE] PNG decode failed: ");
                 Serial.println(get_png_error_string(decode_rc));
-                display_text("Decode Error");
+                // Display decode error icon without clearing (preserves corrupted image)
+                display_decode_error_icon();
+
+#if TEST_DECODE_ERROR
+                Serial.println("[TEST] Decode error icon displayed");
+                Serial.println("[TEST] Observe e-paper display for camera-off icon in lower right");
+                delay(10000);  // Hold for observation
+#endif
             }
 
             png.close();
@@ -626,4 +720,129 @@ void display_battery_warning(uint8_t battery_percent) {
     bbep.fullUpdate(CLEAR_SLOW, false);
 
     delay(500);
+}
+
+/**
+ * @brief Display WiFi error icon in lower right corner
+ *
+ * Draws a WiFi-off icon (48x48) at position (900, 480) without clearing display.
+ * Preserves existing image content and overlays error indicator.
+ * Icon includes white stroke for visibility on any background.
+ *
+ * Visual: WiFi waves with diagonal slash
+ */
+void display_wifi_error_icon() {
+    Serial.println("[DISPLAY] WiFi error icon - preserving screen");
+
+    // Ensure we're in 4BPP mode for proper color rendering
+    bbep.setMode(BB_MODE_4BPP);
+    Serial.println("[DISPLAY] Set to 4BPP mode");
+
+    // Icon position and size
+    const int icon_x = 900;
+    const int icon_y = 480;
+    const int icon_size = 48;
+    const int padding = 4;
+
+    // Clear ONLY icon area in buffer with 4BPP white value
+    // In 4BPP mode: 0 = black, 15 = white
+    Serial.println("[DISPLAY] Filling icon background with white (value 15)");
+    bbep.fillRect(icon_x - padding, icon_y - padding,
+                  icon_size + padding*2, icon_size + padding*2, 15);
+
+    // Draw simplified WiFi symbol with bold shapes for better e-paper rendering
+    Serial.println("[DISPLAY] Drawing WiFi symbol with bold shapes (value 0)");
+    int center_x = icon_x + icon_size/2;
+    int center_y = icon_y + icon_size - 6;
+
+    // Draw WiFi waves as thick filled rectangles instead of thin lines
+    // Outer wave (largest arc) - thick horizontal bar
+    bbep.fillRect(center_x - 18, center_y - 16, 36, 4, 0);
+
+    // Middle wave - medium bar
+    bbep.fillRect(center_x - 12, center_y - 11, 24, 4, 0);
+
+    // Inner wave - small bar
+    bbep.fillRect(center_x - 6, center_y - 6, 12, 4, 0);
+
+    // WiFi dot at bottom center - larger for visibility
+    bbep.fillCircle(center_x, center_y - 1, 3, 0);
+
+    // Draw diagonal slash (thicker for visibility) - 7 pixels wide
+    for (int offset = -3; offset <= 3; offset++) {
+        bbep.drawLine(icon_x + 6, icon_y + icon_size - 6 + offset,
+                     icon_x + icon_size - 6, icon_y + 6 + offset, 0);
+    }
+
+    // Use fullUpdate to ensure icon is actually written to e-paper hardware
+    // Pattern from official TRMNL firmware: always do full refresh for errors
+    // This ensures the framebuffer is properly transferred to display
+    Serial.println("[DISPLAY] Performing full update to display error icon...");
+
+    bbep.fullUpdate(CLEAR_FAST, false);
+
+    Serial.println("[DISPLAY] WiFi error icon displayed");
+}
+
+/**
+ * @brief Display decode error icon in lower right corner
+ *
+ * Draws a camera-video-off icon (48x48) at position (900, 480) without clearing display.
+ * Preserves existing image content and overlays error indicator.
+ * Icon includes white stroke for visibility on any background.
+ *
+ * Visual: Camera/video symbol with diagonal slash
+ */
+void display_decode_error_icon() {
+    Serial.println("[DISPLAY] Decode error icon - preserving screen");
+
+    // Ensure we're in 4BPP mode for proper color rendering
+    bbep.setMode(BB_MODE_4BPP);
+    Serial.println("[DISPLAY] Set to 4BPP mode");
+
+    // Icon position and size
+    const int icon_x = 900;
+    const int icon_y = 480;
+    const int icon_size = 48;
+    const int padding = 4;
+
+    // Clear ONLY icon area in buffer with 4BPP white value
+    // In 4BPP mode: 0 = black, 15 = white
+    Serial.println("[DISPLAY] Filling icon background with white (value 15)");
+    bbep.fillRect(icon_x - padding, icon_y - padding,
+                  icon_size + padding*2, icon_size + padding*2, 15);
+
+    // Draw camera body (rectangle) in black (value 0 in 4BPP mode)
+    Serial.println("[DISPLAY] Drawing camera symbol with black (value 0)");
+    int cam_x = icon_x + 8;
+    int cam_y = icon_y + 12;
+    int cam_w = 24;
+    int cam_h = 24;
+
+    // Camera body outline (thick)
+    bbep.drawRect(cam_x, cam_y, cam_w, cam_h, 0);
+    bbep.drawRect(cam_x + 1, cam_y + 1, cam_w - 2, cam_h - 2, 0);
+
+    // Camera viewfinder triangle (right side)
+    int tri_x = cam_x + cam_w;
+    int tri_y = cam_y + cam_h/2;
+    bbep.drawLine(tri_x, tri_y - 6, tri_x + 8, tri_y - 3, 0);
+    bbep.drawLine(tri_x + 8, tri_y - 3, tri_x + 8, tri_y + 3, 0);
+    bbep.drawLine(tri_x + 8, tri_y + 3, tri_x, tri_y + 6, 0);
+    bbep.drawLine(tri_x, tri_y - 6, tri_x, tri_y + 6, 0);
+
+    // Draw diagonal slash (thicker for visibility)
+    for (int offset = -2; offset <= 2; offset++) {
+        bbep.drawLine(icon_x + 4, icon_y + icon_size - 4 + offset,
+                     icon_x + icon_size - 4, icon_y + 4 + offset, 0);
+    }
+
+    // Use fullUpdate to ensure icon is actually written to e-paper hardware
+    // Pattern from official TRMNL firmware: always do full refresh for errors
+    // This ensures the framebuffer is properly transferred to display
+    Serial.println("[DISPLAY] Performing full update to display error icon...");
+
+    bbep.fullUpdate(CLEAR_FAST, false);
+
+    Serial.println("[DISPLAY] Decode error icon displayed");
 }

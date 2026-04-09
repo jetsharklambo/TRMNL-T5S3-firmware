@@ -2,7 +2,7 @@
 
 TRMNL firmware for the LilyGo T5S3 Pro (ESP32-S3) e-paper display. Displays your TRMNL dashboard content on a beautiful 4.7" e-ink screen with clean, artifact-free rendering.
 
-**[Download Latest Firmware](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)** • **Version 1.1.1**
+**[Download Latest Firmware](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)** • **Version 1.1.2**
 
 ---
 
@@ -23,10 +23,12 @@ TRMNL firmware for the LilyGo T5S3 Pro (ESP32-S3) e-paper display. Displays your
 - **Zero-Configuration Setup**: Connect via WiFi AP on first boot, enter your WiFi credentials, and you're done
 - **Auto-Registration**: Device automatically registers with TRMNL backend using its MAC address
 - **Remote Content Updates**: Downloads and displays content from your TRMNL dashboard
+- **Enhanced Grayscale Rendering**: Custom 103-gray matrix for improved image accuracy and detail
 - **Deep Sleep Power Management**: Optimized for long battery life (~1 week with 30-minute refresh intervals)
 - **Over-the-Air Updates**: Firmware updates delivered automatically from TRMNL
 - **4.7" E-Paper Display**: Beautiful 960x540 grayscale display with excellent outdoor visibility
 - **Battery Monitoring**: Real-time battery status with intelligent power management
+- **Improved Error Visibility**: Clear error indicators for WiFi and connection issues
 
 ## What You Need
 
@@ -51,7 +53,7 @@ Choose one of the two methods below:
 
 1. **Download the firmware**
    - Download the latest release from the [releases page](https://github.com/jetsharklambo/TRMNL-T5S3-firmware/releases)
-   - Get the file: `trmnl-t5s3-v1.1.1-factory.bin`
+   - Get the file: `trmnl-t5s3-v1.1.2-factory.bin`
 
 2. **Put device in bootloader mode**
 
@@ -83,7 +85,7 @@ Choose one of the two methods below:
 
 5. **Configure flash settings**
    - **Flash Address**: Enter `0x0` ⚠️ **Important: Must be 0x0, not 0x1000**
-   - **File**: Click "Choose File" and select `trmnl-t5s3-v1.1.1-factory.bin`
+   - **File**: Click "Choose File" and select `trmnl-t5s3-v1.1.2-factory.bin`
    - **Baudrate**: `921600` (or `460800` if you experience issues)
 
 6. **Flash the firmware**
@@ -239,6 +241,48 @@ Once your device is set up and running:
 - **Battery monitoring**: View battery status in your TRMNL dashboard
 - **Button wake**: Press the button to manually trigger a content refresh
 - **Deep sleep**: Device sleeps between updates to maximize battery life
+
+---
+
+## Configuration
+
+Advanced users can customize firmware behavior by editing `include/config.h` and rebuilding. See [BUILD_FIRMWARE.md](docs/BUILD_FIRMWARE.md) for complete build instructions.
+
+### Sleep & Power Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `TRMNL_DEEP_SLEEP_SECONDS` | `10` | How long device sleeps between updates (seconds). For testing: 10s, Production: 300s (5 min) or higher. Server can override via API. |
+| `TRMNL_SHUTDOWN_TIMER_SECONDS` | `0` | Delay before entering deep sleep (seconds). 0 = immediate sleep after display update. |
+| `WIFI_CONNECT_TIMEOUT` | `15` | WiFi connection timeout (seconds). Increase if your network is slow to connect. |
+
+### Display Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `DISPLAY_ROTATION` | `180` | Display rotation in degrees (0, 90, 180, 270). Use 180 if device is mounted upside down. |
+| `IMAGE_X_OFFSET` | `3` | Horizontal image offset in pixels. Adjust if image is too close to left/right bezel. |
+| `GAMMA_CORRECTION_VALUE` | `1.0` | Gamma correction for e-ink (0.5-2.0). 1.0 = disabled, <1.0 = brighter, >1.0 = darker. |
+
+### OTA Update Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `OTA_ENABLE` | `1` | Enable/disable OTA updates (1=enabled, 0=disabled). |
+| `OTA_AUTO_UPDATE` | `1` | Automatically update when server sends update flag (1=enabled, 0=manual only). |
+| `OTA_MIN_BATTERY_PERCENT` | `30` | Minimum battery % required for OTA updates. Safety measure to prevent bricking on low battery. |
+| `OTA_CUSTOM_FIRMWARE_URL` | `""` | Custom firmware URL for testing. Leave empty to use server-managed updates. |
+
+### Battery Monitoring
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `BATTERY_MIN_VOLTAGE` | `3.0` | Low battery warning threshold (volts). Device shows warning below this. |
+| `BATTERY_MAX_VOLTAGE` | `4.2` | Maximum lithium cell voltage (volts). Used for SOC calculation. |
+
+**Note**: After changing config values, you must rebuild and reflash the firmware. Configuration changes only take effect after flashing the new binary.
+
+---
 
 ## Troubleshooting
 

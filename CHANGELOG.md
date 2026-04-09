@@ -5,6 +5,27 @@ All notable changes to the TRMNL-T5S3 firmware will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-04-09
+
+### Changed
+- **Grayscale Rendering**: Updated to custom 103-gray matrix for improved image accuracy
+  - Enhanced contrast and detail preservation on e-paper display
+  - Better representation of grayscale images
+  - More accurate color-to-grayscale conversion
+
+### Fixed
+- **Error Icon Display**: Error icons now render correctly on e-paper
+  - WiFi error icon displays properly using `fullUpdate()` instead of `partialUpdate()`
+  - Decode error icon displays properly
+  - Aligned with official TRMNL firmware display update pattern
+  - Fixed framebuffer initialization for error states
+
+### Added
+- **WiFi Status Decoder**: Added utility functions for debugging WiFi connection issues
+  - `wifi_status_string()` converts WiFi status codes to human-readable text
+  - `debug_wifi_status()` prints current WiFi state to serial
+- **Error Testing Framework**: Internal testing tools for validating error state handling (compile-time flags)
+
 ## [1.1.1] - 2026-04-07
 
 ### 🎉 Upstream FastEPD Fix
